@@ -1,5 +1,5 @@
 import express, { Request, Response } from 'express';
-import Temporal from "./temporal";
+import Temporal from "./temporal.service";
 
 const PORT: number = 3001;
 
@@ -13,7 +13,7 @@ const temporal = new Temporal()
 
 app.get('/workflow', async (req: Request<{}, {}, {}, WorkflowQuery>, res: Response) => {
     const { id ,namespace} = req.query;
-    const data = await temporal.getWorkflowData(namespace, id)
+    const data = await temporal.getRootWorkflowData(namespace, id)
     res.status(200).json({data});
 });
 
