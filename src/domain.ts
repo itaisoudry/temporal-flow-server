@@ -18,40 +18,14 @@ export enum EventType {
     CHILD_WORKFLOW_EXECUTION_STARTED = "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED"
 }
 
-
 export enum TaskQueueKind {
     NORMAL = "TASK_QUEUE_KIND_NORMAL",
     STICKY = "TASK_QUEUE_KIND_STICKY"
 }
 
-export interface Event {
-    eventId: string;
-    eventTime: string;
-    eventType: EventType;
-    version: string;
-    taskId: string;
-
-    workflowExecutionStartedEventAttributes?: WorkflowExecutionStartedEventAttributes;
-    workflowTaskScheduledEventAttributes?: WorkflowTaskScheduledEventAttributes;
-    workflowTaskStartedEventAttributes?: WorkflowTaskStartedEventAttributes;
-    workflowTaskCompletedEventAttributes?: WorkflowTaskCompletedEventAttributes;
-    activityTaskScheduledEventAttributes?: ActivityTaskScheduledEventAttributes;
-    activityTaskStartedEventAttributes?: ActivityTaskStartedEventAttributes;
-    workflowExecutionCompletedEventAttributes?: WorkflowExecutionCompletedEventAttributes;
-
-    // Add newly referenced attributes:
-    activityTaskCompletedEventAttributes?: ActivityTaskCompletedEventAttributes;
-    activityTaskFailedEventAttributes?: ActivityTaskFailedEventAttributes;
-    activityTaskTimedOutEventAttributes?: ActivityTaskTimedOutEventAttributes;
-    activityTaskCanceledEventAttributes?: ActivityTaskCanceledEventAttributes;
-
-    workflowExecutionFailedEventAttributes?: WorkflowExecutionFailedEventAttributes;
-    workflowExecutionTimedOutEventAttributes?: WorkflowExecutionTimedOutEventAttributes;
-    workflowExecutionCanceledEventAttributes?: WorkflowExecutionCanceledEventAttributes;
-    workflowExecutionTerminatedEventAttributes?: WorkflowExecutionTerminatedEventAttributes;
-
-    startChildWorkflowExecutionInitiatedEventAttributes?: StartChildWorkflowExecutionInitiatedEventAttributes;
-    childWorkflowExecutionStartedEventAttributes?: ChildWorkflowExecutionStartedEventAttributes;
+export interface Payload {
+    metadata?: Record<string, string>;
+    data?: string;
 }
 
 export interface WorkflowExecutionStartedEventAttributes {
@@ -105,10 +79,9 @@ export interface WorkflowTaskCompletedEventAttributes {
     meteringMetadata?: Record<string, unknown>;
 }
 
-
 export interface WorkflowExecutionFailedEventAttributes {
     failure?: unknown;
-    retryState?: string; // optional, depending on Temporal version
+    retryState?: string; // optional
     workflowTaskCompletedEventId: string;
 }
 
@@ -130,7 +103,7 @@ export interface WorkflowExecutionTerminatedEventAttributes {
 export interface StartChildWorkflowExecutionInitiatedEventAttributes {
     workflowId: string;
     workflowType: { name: string };
-    // other fields as needed
+    // additional fields as needed
 }
 
 export interface ChildWorkflowExecutionStartedEventAttributes {
@@ -145,33 +118,6 @@ export interface ChildWorkflowExecutionStartedEventAttributes {
         runId: string;
     };
 }
-
-export interface ActivityTaskCompletedEventAttributes {
-    result?: {
-        payloads?: Payload[];
-    };
-    scheduledEventId: string;
-    startedEventId: string;
-    identity: string;
-}
-
-export interface ActivityTaskFailedEventAttributes {
-    scheduledEventId: string;
-    startedEventId: string;
-    failure?: unknown; // You can refine this based on Temporal's Failure structure
-}
-
-export interface ActivityTaskTimedOutEventAttributes {
-    scheduledEventId: string;
-    startedEventId: string;
-    timeoutType: string; // e.g. "START_TO_CLOSE"
-}
-
-export interface ActivityTaskCanceledEventAttributes {
-    scheduledEventId: string;
-    startedEventId: string;
-}
-
 
 export interface ActivityTaskScheduledEventAttributes {
     activityId: string;
@@ -204,6 +150,32 @@ export interface ActivityTaskStartedEventAttributes {
     };
 }
 
+export interface ActivityTaskCompletedEventAttributes {
+    result?: {
+        payloads?: Payload[];
+    };
+    scheduledEventId: string;
+    startedEventId: string;
+    identity: string;
+}
+
+export interface ActivityTaskFailedEventAttributes {
+    scheduledEventId: string;
+    startedEventId: string;
+    failure?: unknown;
+}
+
+export interface ActivityTaskTimedOutEventAttributes {
+    scheduledEventId: string;
+    startedEventId: string;
+    timeoutType: string; // e.g. "START_TO_CLOSE"
+}
+
+export interface ActivityTaskCanceledEventAttributes {
+    scheduledEventId: string;
+    startedEventId: string;
+}
+
 export interface WorkflowExecutionCompletedEventAttributes {
     result: {
         payloads: Payload[];
@@ -211,10 +183,41 @@ export interface WorkflowExecutionCompletedEventAttributes {
     workflowTaskCompletedEventId: string;
 }
 
-export type Payload = {
-    metadata?: Record<string, string>;
-    data?: string;
-};
+export interface Event {
+    eventId: string;
+    eventTime: string;
+    eventType: EventType;
+    version: string;
+    taskId: string;
+
+    workflowExecutionStartedEventAttributes?: WorkflowExecutionStartedEventAttributes;
+    workflowTaskScheduledEventAttributes?: WorkflowTaskScheduledEventAttributes;
+    workflowTaskStartedEventAttributes?: WorkflowTaskStartedEventAttributes;
+    workflowTaskCompletedEventAttributes?: WorkflowTaskCompletedEventAttributes;
+    activityTaskScheduledEventAttributes?: ActivityTaskScheduledEventAttributes;
+    activityTaskStartedEventAttributes?: ActivityTaskStartedEventAttributes;
+    workflowExecutionCompletedEventAttributes?: WorkflowExecutionCompletedEventAttributes;
+    activityTaskCompletedEventAttributes?: ActivityTaskCompletedEventAttributes;
+    activityTaskFailedEventAttributes?: ActivityTaskFailedEventAttributes;
+    activityTaskTimedOutEventAttributes?: ActivityTaskTimedOutEventAttributes;
+    activityTaskCanceledEventAttributes?: ActivityTaskCanceledEventAttributes;
+    workflowExecutionFailedEventAttributes?: WorkflowExecutionFailedEventAttributes;
+    workflowExecutionTimedOutEventAttributes?: WorkflowExecutionTimedOutEventAttributes;
+    workflowExecutionCanceledEventAttributes?: WorkflowExecutionCanceledEventAttributes;
+    workflowExecutionTerminatedEventAttributes?: WorkflowExecutionTerminatedEventAttributes;
+    startChildWorkflowExecutionInitiatedEventAttributes?: StartChildWorkflowExecutionInitiatedEventAttributes;
+    childWorkflowExecutionStartedEventAttributes?: ChildWorkflowExecutionStartedEventAttributes;
+}
+
+export interface HistoryResponse {
+    history: {
+        events: Event[];
+    };
+}
+
+export interface ParseOptions {
+    // Future options if needed
+}
 
 export type Activity = {
     type: 'activity';
@@ -225,7 +228,7 @@ export type Activity = {
     startTime?: string;
     endTime?: string;
     status?: string;
-    resultPayload?: Payload[];
+    payload?: Payload[];
     relatedEventIds?: string[];
 };
 
@@ -239,80 +242,8 @@ export type Workflow = {
     status?: string;
     parentWorkflowId?: string;
     parentRunId?: string;
+    payload?: Payload[];
     relatedEventIds?: string[];
 };
 
 export type ChronologicalItem = Workflow | Activity;
-
-type HistoryEvent = {
-    eventId: string;
-    eventTime: string;
-    eventType: string;
-    version: string;
-    taskId: string;
-    workflowExecutionStartedEventAttributes?: {
-        workflowType: { name: string };
-        firstExecutionRunId: string;
-        // ... other fields omitted for brevity
-        workflowId: string;
-    };
-    workflowExecutionCompletedEventAttributes?: {
-        result?: { payloads?: Payload[] };
-        workflowTaskCompletedEventId: string;
-    };
-    workflowExecutionFailedEventAttributes?: any;
-    workflowExecutionTimedOutEventAttributes?: any;
-    workflowExecutionCanceledEventAttributes?: any;
-    workflowExecutionTerminatedEventAttributes?: any;
-    activityTaskScheduledEventAttributes?: {
-        activityId: string;
-        activityType: { name: string };
-        workflowTaskCompletedEventId: string;
-    };
-    activityTaskStartedEventAttributes?: {
-        scheduledEventId: string;
-    };
-    activityTaskCompletedEventAttributes?: {
-        scheduledEventId: string;
-        startedEventId: string;
-        identity: string;
-        result?: { payloads?: Payload[] };
-    };
-    activityTaskFailedEventAttributes?: {
-        scheduledEventId: string;
-    };
-    activityTaskTimedOutEventAttributes?: {
-        scheduledEventId: string;
-    };
-    activityTaskCanceledEventAttributes?: {
-        scheduledEventId: string;
-    };
-    startChildWorkflowExecutionInitiatedEventAttributes?: {
-        workflowId: string;
-        workflowType: { name: string };
-        // runId not known yet here, only after started
-    };
-    childWorkflowExecutionStartedEventAttributes?: {
-        workflowExecution?: {
-            workflowId: string;
-            runId: string;
-        };
-        workflowType?: { name: string };
-        initiatedEventId: string;
-        parentWorkflowExecution?: {
-            workflowId: string;
-            runId: string;
-        };
-    };
-};
-
-export interface ParseOptions {
-    // Future options if needed
-}
-
-export interface HistoryResponse {
-    history: {
-        events: HistoryEvent[];
-    };
-}
-

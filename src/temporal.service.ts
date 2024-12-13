@@ -1,4 +1,4 @@
-import {Activity, ChronologicalItem, HistoryResponse, ParseOptions, Workflow} from "./domain";
+import {Activity, ChronologicalItem, EventType, HistoryResponse, ParseOptions, Workflow} from "./domain";
 
 
 export class TemporalWorkflowChronologicalItems {
@@ -53,54 +53,22 @@ export default class TemporalService {
         if (!response.ok) {
             throw new Error(`Failed to fetch workflow history. Status: ${response.status}`);
         }
-
         return await response.json() as HistoryResponse;
     }
 
-    parseTemporalHistory(data: HistoryResponse, options?: ParseOptions): ChronologicalItem[] {
+     parseTemporalHistory(data: HistoryResponse, options?: ParseOptions): ChronologicalItem[] {
         const events = data.history.events;
 
         const chronologicalList: ChronologicalItem[] = [];
 
-        // Maps
         const workflowMap: Record<string, Workflow> = {};
-        // We'll key workflows by their workflowId, but be mindful that runId might also be needed if multiple runs.
-        // For simplicity, assume workflowId is unique or we can store `workflowId#runId` as key.
-
         const activityMap: Record<string, Activity> = {};
-        // Key activity by a combination of workflowId + activityId to ensure uniqueness if multiple workflows appear.
-        // We'll store them as `${workflowId}:${activityId}`
-
-        // For locating which workflow an event belongs to:
-        // The given history might contain multiple workflows: main and children.
-        // The main workflow is known from EVENT_TYPE_WORKFLOW_EXECUTION_STARTED (no parent).
-        // Child workflows appear in CHILD_WORKFLOW_EXECUTION_STARTED events.
-        //
-        // However, a single combined history containing multiple workflows is unusual unless you're merging them yourself.
-        // We'll assume `workflowId` known from start events. If not, you might need additional logic.
-
-        // Track the currently "active" workflowId. The main history usually pertains to a single main workflow.
-        // If multiple workflows appear, we rely on childWorkflowExecutionStartedEventAttributes.
-        //
-        // Actually, each event belongs to a single workflow execution's history. If we have multiple workflows,
-        // we must know which workflow they belong to. In a single history, all events belong to one workflow execution
-        // plus references to children. If we actually get children events inline,
-        // `childWorkflowExecutionStartedEventAttributes` gives us the child's workflowId and runId.
-        // We'll create a separate workflow object for that child and add it to the list.
-
-        // For simplicity, assume all activity events belong to the main workflow unless preceded by child workflow start.
-        // In real scenarios, you'd have separate histories per workflow.
-        // Here, if we detect a child workflow started, we just add it. Activities triggered by the child should appear
-        // after its start event. Without additional info, we can't differentiate easily. We'll assume:
-        // - Activities belong to the most recently started workflow that hasn't ended (stack-based approach).
-        // In a real scenario, you'd have runId/workflowId associated with each event. For now, let's simplify:
-
-        // We'll keep a stack of "current workflow" contexts. The top of the stack is the current active workflow.
+        // We'll track the currently active workflows. The top of the stack is the one to which activities are attributed.
         const workflowStack: string[] = [];
 
         for (const event of events) {
             switch (event.eventType) {
-                case 'EVENT_TYPE_WORKFLOW_EXECUTION_STARTED': {
+                case EventType.WORKFLOW_EXECUTION_STARTED: {
                     const attrs = event.workflowExecutionStartedEventAttributes;
                     if (attrs) {
                         const wf: Workflow = {
@@ -111,7 +79,9 @@ export default class TemporalService {
                             startTime: event.eventTime,
                             status: 'RUNNING',
                             relatedEventIds: [event.eventId],
+                            payload: attrs.input?.payloads ,
                         };
+
                         workflowMap[attrs.workflowId] = wf;
                         chronologicalList.push(wf);
                         workflowStack.push(attrs.workflowId);
@@ -119,73 +89,46 @@ export default class TemporalService {
                     break;
                 }
 
-                case 'EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED': {
+                case EventType.WORKFLOW_EXECUTION_COMPLETED:
+                case EventType.WORKFLOW_EXECUTION_FAILED:
+                case EventType.WORKFLOW_EXECUTION_TIMED_OUT:
+                case EventType.WORKFLOW_EXECUTION_CANCELED:
+                case EventType.WORKFLOW_EXECUTION_TERMINATED: {
+                    // These are terminal states for the currently active workflow
                     const topWorkflowId = workflowStack[workflowStack.length - 1];
                     const wf = workflowMap[topWorkflowId];
                     if (wf) {
-                        wf.status = 'COMPLETED';
                         wf.endTime = event.eventTime;
-                        wf.relatedEventIds?.push(event.eventId);
-                    }
-                    // Pop the workflow since it's ended
-                    workflowStack.pop();
-                    break;
-                }
+                        wf.relatedEventIds = wf.relatedEventIds || [];
+                        wf.relatedEventIds.push(event.eventId);
 
-                case 'EVENT_TYPE_WORKFLOW_EXECUTION_FAILED': {
-                    const topWorkflowId = workflowStack[workflowStack.length - 1];
-                    const wf = workflowMap[topWorkflowId];
-                    if (wf) {
-                        wf.status = 'FAILED';
-                        wf.endTime = event.eventTime;
-                        wf.relatedEventIds?.push(event.eventId);
-                    }
-                    workflowStack.pop();
-                    break;
-                }
-
-                case 'EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT': {
-                    const topWorkflowId = workflowStack[workflowStack.length - 1];
-                    const wf = workflowMap[topWorkflowId];
-                    if (wf) {
-                        wf.status = 'TIMED_OUT';
-                        wf.endTime = event.eventTime;
-                        wf.relatedEventIds?.push(event.eventId);
+                        switch (event.eventType) {
+                            case EventType.WORKFLOW_EXECUTION_COMPLETED:
+                                wf.status = 'COMPLETED';
+                                break;
+                            case EventType.WORKFLOW_EXECUTION_FAILED:
+                                wf.status = 'FAILED';
+                                break;
+                            case EventType.WORKFLOW_EXECUTION_TIMED_OUT:
+                                wf.status = 'TIMED_OUT';
+                                break;
+                            case EventType.WORKFLOW_EXECUTION_CANCELED:
+                                wf.status = 'CANCELED';
+                                break;
+                            case EventType.WORKFLOW_EXECUTION_TERMINATED:
+                                wf.status = 'TERMINATED';
+                                break;
+                        }
                     }
                     workflowStack.pop();
                     break;
                 }
 
-                case 'EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED': {
-                    const topWorkflowId = workflowStack[workflowStack.length - 1];
-                    const wf = workflowMap[topWorkflowId];
-                    if (wf) {
-                        wf.status = 'CANCELED';
-                        wf.endTime = event.eventTime;
-                        wf.relatedEventIds?.push(event.eventId);
-                    }
-                    workflowStack.pop();
-                    break;
-                }
-
-                case 'EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED': {
-                    const topWorkflowId = workflowStack[workflowStack.length - 1];
-                    const wf = workflowMap[topWorkflowId];
-                    if (wf) {
-                        wf.status = 'TERMINATED';
-                        wf.endTime = event.eventTime;
-                        wf.relatedEventIds?.push(event.eventId);
-                    }
-                    workflowStack.pop();
-                    break;
-                }
-
-                case 'EVENT_TYPE_ACTIVITY_TASK_SCHEDULED': {
-                    // Create an activity object and put it into the chronological list.
+                case EventType.ACTIVITY_TASK_SCHEDULED: {
                     const topWorkflowId = workflowStack[workflowStack.length - 1];
                     const attrs = event.activityTaskScheduledEventAttributes;
                     if (attrs && topWorkflowId) {
-                        const activityId = `${topWorkflowId}:${attrs.activityId}`;
+                        const activityIdKey = `${topWorkflowId}:${attrs.activityId}`;
                         const act: Activity = {
                             type: 'activity',
                             activityId: attrs.activityId,
@@ -195,27 +138,28 @@ export default class TemporalService {
                             status: 'SCHEDULED',
                             relatedEventIds: [event.eventId],
                         };
-                        activityMap[activityId] = act;
+                        activityMap[activityIdKey] = act;
                         chronologicalList.push(act);
                     }
                     break;
                 }
 
-                case 'EVENT_TYPE_ACTIVITY_TASK_STARTED': {
+                case EventType.ACTIVITY_TASK_STARTED: {
                     const attrs = event.activityTaskStartedEventAttributes;
                     if (attrs) {
-                        // We only know scheduledEventId. We must find which activity that corresponds to.
-                        // In a complete solution, you'd map eventIds to activityIds. For simplicity:
-                        // We'll scan backwards through chronologicalList to find the last scheduled activity with no startTime.
-                        // This is a simplification. Ideally, maintain a map from eventId->activityId at schedule time.
                         const topWorkflowId = workflowStack[workflowStack.length - 1];
-                        // We'll do a quick search from the end:
+                        // Find last scheduled activity without a startTime
                         for (let i = chronologicalList.length - 1; i >= 0; i--) {
                             const item = chronologicalList[i];
-                            if (item.type === 'activity' && item.workflowId === topWorkflowId && item.status === 'SCHEDULED') {
+                            if (
+                                item.type === 'activity' &&
+                                item.workflowId === topWorkflowId &&
+                                item.status === 'SCHEDULED'
+                            ) {
                                 item.startTime = event.eventTime;
                                 item.status = 'STARTED';
-                                item.relatedEventIds?.push(event.eventId);
+                                item.relatedEventIds = item.relatedEventIds || [];
+                                item.relatedEventIds.push(event.eventId);
                                 break;
                             }
                         }
@@ -223,34 +167,37 @@ export default class TemporalService {
                     break;
                 }
 
-                case 'EVENT_TYPE_ACTIVITY_TASK_COMPLETED':
-                case 'EVENT_TYPE_ACTIVITY_TASK_FAILED':
-                case 'EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT':
-                case 'EVENT_TYPE_ACTIVITY_TASK_CANCELED': {
+                case EventType.ACTIVITY_TASK_COMPLETED:
+                case EventType.ACTIVITY_TASK_FAILED:
+                case EventType.ACTIVITY_TASK_TIMED_OUT:
+                case EventType.ACTIVITY_TASK_CANCELED: {
                     const topWorkflowId = workflowStack[workflowStack.length - 1];
-                    // Similar to started, we find the last "in-progress" activity and update it.
-                    // For a robust solution, you'd store a map of scheduledEventId to activityId when scheduled.
-                    let status: string;
-                    if (event.eventType === 'EVENT_TYPE_ACTIVITY_TASK_COMPLETED') {
-                        status = 'COMPLETED';
-                    } else if (event.eventType === 'EVENT_TYPE_ACTIVITY_TASK_FAILED') {
-                        status = 'FAILED';
-                    } else if (event.eventType === 'EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT') {
-                        status = 'TIMED_OUT';
-                    } else {
-                        status = 'CANCELED';
+                    let newStatus: string;
+                    switch (event.eventType) {
+                        case EventType.ACTIVITY_TASK_COMPLETED:
+                            newStatus = 'COMPLETED';
+                            break;
+                        case EventType.ACTIVITY_TASK_FAILED:
+                            newStatus = 'FAILED';
+                            break;
+                        case EventType.ACTIVITY_TASK_TIMED_OUT:
+                            newStatus = 'TIMED_OUT';
+                            break;
+                        case EventType.ACTIVITY_TASK_CANCELED:
+                            newStatus = 'CANCELED';
+                            break;
                     }
 
                     for (let i = chronologicalList.length - 1; i >= 0; i--) {
                         const item = chronologicalList[i];
                         if (item.type === 'activity' && item.workflowId === topWorkflowId && (item.status === 'STARTED' || item.status === 'SCHEDULED')) {
                             item.endTime = event.eventTime;
-                            item.status = status;
-                            item.relatedEventIds?.push(event.eventId);
+                            item.status = newStatus;
+                            item.relatedEventIds = item.relatedEventIds || [];
+                            item.relatedEventIds.push(event.eventId);
 
-                            // If completed and has result, store it
-                            if (status === 'COMPLETED' && event.activityTaskCompletedEventAttributes?.result?.payloads) {
-                                item.resultPayload = event.activityTaskCompletedEventAttributes.result.payloads;
+                            if (event.eventType === EventType.ACTIVITY_TASK_COMPLETED && event.activityTaskCompletedEventAttributes?.result?.payloads) {
+                                item.payload = event.activityTaskCompletedEventAttributes.result.payloads;
                             }
                             break;
                         }
@@ -258,7 +205,7 @@ export default class TemporalService {
                     break;
                 }
 
-                case 'EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED': {
+                case EventType.CHILD_WORKFLOW_EXECUTION_STARTED: {
                     const attrs = event.childWorkflowExecutionStartedEventAttributes;
                     if (attrs && attrs.workflowExecution) {
                         const childWfId = attrs.workflowExecution.workflowId;
@@ -270,10 +217,8 @@ export default class TemporalService {
                             runId: childRunId,
                             startTime: event.eventTime,
                             status: 'RUNNING',
-                            // If parent info is available
                             parentWorkflowId: attrs.parentWorkflowExecution?.workflowId,
                             parentRunId: attrs.parentWorkflowExecution?.runId,
-                            // We might not know the workflowType name from this event or it might be provided in attributes
                             workflowType: attrs.workflowType?.name,
                             relatedEventIds: [event.eventId],
                         };
@@ -285,8 +230,9 @@ export default class TemporalService {
                     break;
                 }
 
+                // If you need to handle START_CHILD_WORKFLOW_EXECUTION_INITIATED or other events, add logic here
                 default:
-                    // Ignore other events for now
+                    // Ignore other events
                     break;
             }
         }
