@@ -137,6 +137,7 @@ export default class TemporalService {
                             scheduleTime: event.eventTime,
                             status: 'SCHEDULED',
                             relatedEventIds: [event.eventId],
+                            workflowTaskCompletedEventId: attrs.workflowTaskCompletedEventId,
                         };
                         activityMap[activityIdKey] = act;
                         chronologicalList.push(act);

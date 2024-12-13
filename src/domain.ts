@@ -230,6 +230,7 @@ export type Activity = {
     status?: string;
     payload?: Payload[];
     relatedEventIds?: string[];
+    workflowTaskCompletedEventId?: string;
 };
 
 export type Workflow = {
