@@ -11,10 +11,17 @@ interface WorkflowQuery {
 
 const temporal = new Temporal()
 
+app.use((req,res,next) => {
+    res.setHeader('Access-Control-Allow-Origin','*');
+    res.setHeader('Access-Control-Allow-Methods','GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers','Content-Type');
+    next();
+});
+
 app.get('/workflow', async (req: Request<{}, {}, {}, WorkflowQuery>, res: Response) => {
     const { id ,namespace} = req.query;
     const data = await temporal.getRootWorkflowData(namespace, id)
-    res.status(200).json({data});
+    res.status(200).json(data);
 });
 
 app.listen(PORT, () => {

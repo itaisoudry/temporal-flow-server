@@ -1,5 +1,16 @@
 import {Activity, ChronologicalItem, HistoryResponse, ParseOptions, Workflow} from "./domain";
 
+
+export class TemporalWorkflowChronologicalItems {
+    rootWorkflow: ChronologicalItem[]
+    childWorkflows: Record<string, ChronologicalItem[]>
+
+    constructor(rootWorkflow: ChronologicalItem[], childWorkflows: Record<string, ChronologicalItem[]>) {
+        this.rootWorkflow = rootWorkflow;
+        this.childWorkflows = childWorkflows;
+    }
+}
+
 export default class TemporalService {
 
     apiKey: string
@@ -21,19 +32,18 @@ export default class TemporalService {
     async getRootWorkflowData(namespace: string, rootWorkflowId: string) {
         const historyResponse = await this.getWorkflowData(namespace, rootWorkflowId);
 
-        const workflowsMap: Record<string, ChronologicalItem[]> = {};
+        const childWorkflowsMap: Record<string, ChronologicalItem[]> = {};
         const rootWorkflowChronologicalItems = this.parseTemporalHistory(historyResponse);
-        workflowsMap[rootWorkflowId] = rootWorkflowChronologicalItems;
 
         for (const item of rootWorkflowChronologicalItems) {
             if (item.type === 'childWorkflow') {
                 const childWorkflowId = item.workflowId;
                 const childWorkflowHistoryResponse = await this.getWorkflowData(namespace, childWorkflowId);
-                workflowsMap[childWorkflowId] = this.parseTemporalHistory(childWorkflowHistoryResponse);
+                childWorkflowsMap[childWorkflowId] = this.parseTemporalHistory(childWorkflowHistoryResponse);
             }
         }
 
-        return workflowsMap
+        return new TemporalWorkflowChronologicalItems(rootWorkflowChronologicalItems, childWorkflowsMap);
     }
 
     private async getWorkflowData(namespace: string, workflowId: string) {
