@@ -103,6 +103,7 @@ export interface WorkflowExecutionTerminatedEventAttributes {
 export interface StartChildWorkflowExecutionInitiatedEventAttributes {
     workflowId: string;
     workflowType: { name: string };
+    workflowTaskCompletedEventId: string;
     // additional fields as needed
 }
 
@@ -213,6 +214,7 @@ export interface HistoryResponse {
     history: {
         events: Event[];
     };
+    nextPageToken?: string;
 }
 
 export interface ParseOptions {
@@ -245,6 +247,7 @@ export type Workflow = {
     parentRunId?: string;
     payload?: Payload[];
     relatedEventIds?: string[];
+    workflowTaskCompletedEventId?: string;
 };
 
 export type ChronologicalItem = Workflow | Activity;

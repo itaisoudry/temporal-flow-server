@@ -1,4 +1,4 @@
-import {Activity, ChronologicalItem, EventType, HistoryResponse, ParseOptions, Workflow} from "./domain";
+import {Activity, ChronologicalItem, Event, EventType, HistoryResponse, ParseOptions, Workflow} from "./domain";
 
 
 export class TemporalWorkflowChronologicalItems {
@@ -38,8 +38,14 @@ export default class TemporalService {
         for (const item of rootWorkflowChronologicalItems) {
             if (item.type === 'childWorkflow') {
                 const childWorkflowId = item.workflowId;
-                const childWorkflowHistoryResponse = await this.getWorkflowData(namespace, childWorkflowId);
-                childWorkflowsMap[childWorkflowId] = this.parseTemporalHistory(childWorkflowHistoryResponse);
+                try {
+                    const childWorkflowHistoryResponse = await this.getWorkflowData(namespace, childWorkflowId);
+                    childWorkflowsMap[childWorkflowId] = this.parseTemporalHistory(childWorkflowHistoryResponse);
+                } catch (error) {
+                    console.error(`Failed to fetch child workflow history for ${childWorkflowId}`, error);
+                    // TODO replace with node that indicates missing data?
+                }
+
             }
         }
 
@@ -47,18 +53,27 @@ export default class TemporalService {
     }
 
     private async getWorkflowData(namespace: string, workflowId: string) {
-        const url = `https://${this.endpoint}.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows/${workflowId}/history`
+        let baseUrl = `https://${this.endpoint}.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows/${workflowId}/history?next_page_token=`
+        const headers=  {headers: {"Authorization": `Bearer ${this.apiKey}`}};
 
-        const response =  await fetch(url, {headers: {"Authorization": `Bearer ${this.apiKey}`}})
-        if (!response.ok) {
-            throw new Error(`Failed to fetch workflow history. Status: ${response.status}`);
-        }
-        return await response.json() as HistoryResponse;
+        const allEvents = [];
+        let nextPageToken = null;
+        do {
+            // encode nextPageToken with url encoding
+            let url = nextPageToken ? baseUrl + encodeURIComponent(nextPageToken) : baseUrl;
+            const response = await fetch(url, headers);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch workflow history. Status: ${response.status}`);
+            }
+            const data = await response.json() as HistoryResponse;
+            allEvents.push(...data.history.events);
+            nextPageToken = data.nextPageToken;
+        } while (nextPageToken);
+
+        return allEvents;
     }
 
-     parseTemporalHistory(data: HistoryResponse, options?: ParseOptions): ChronologicalItem[] {
-        const events = data.history.events;
-
+    parseTemporalHistory(events: Event[], options?: ParseOptions): ChronologicalItem[] {
         const chronologicalList: ChronologicalItem[] = [];
 
         const workflowMap: Record<string, Workflow> = {};
@@ -79,7 +94,7 @@ export default class TemporalService {
                             startTime: event.eventTime,
                             status: 'RUNNING',
                             relatedEventIds: [event.eventId],
-                            payload: attrs.input?.payloads ,
+                            payload: attrs.input?.payloads,
                         };
 
                         workflowMap[attrs.workflowId] = wf;
@@ -212,21 +227,59 @@ export default class TemporalService {
                         const childWfId = attrs.workflowExecution.workflowId;
                         const childRunId = attrs.workflowExecution.runId;
 
-                        const childWorkflow: Workflow = {
-                            type: 'childWorkflow',
-                            workflowId: childWfId,
-                            runId: childRunId,
-                            startTime: event.eventTime,
-                            status: 'RUNNING',
-                            parentWorkflowId: attrs.parentWorkflowExecution?.workflowId,
-                            parentRunId: attrs.parentWorkflowExecution?.runId,
-                            workflowType: attrs.workflowType?.name,
-                            relatedEventIds: [event.eventId],
-                        };
+                        if(childWfId in workflowMap){
+                            // If the child workflow has already been started, update the existing entry
+                            const existingChildWorkflow = workflowMap[childWfId];
+                            existingChildWorkflow.startTime = event.eventTime;
+                            existingChildWorkflow.relatedEventIds = existingChildWorkflow.relatedEventIds || [];
+                            existingChildWorkflow.relatedEventIds.push(event.eventId);
+                        }else{
+                            const childWorkflow: Workflow = {
+                                type: 'childWorkflow',
+                                workflowId: childWfId,
+                                runId: childRunId,
+                                startTime: event.eventTime,
+                                status: 'RUNNING',
+                                parentWorkflowId: attrs.parentWorkflowExecution?.workflowId,
+                                parentRunId: attrs.parentWorkflowExecution?.runId,
+                                workflowType: attrs.workflowType?.name,
+                                relatedEventIds: [event.eventId],
+                            };
 
-                        workflowMap[childWfId] = childWorkflow;
-                        chronologicalList.push(childWorkflow);
-                        workflowStack.push(childWfId);
+                            workflowMap[childWfId] = childWorkflow;
+                            chronologicalList.push(childWorkflow);
+                            workflowStack.push(childWfId);
+                        }
+                    }
+                    break;
+                }
+
+                case EventType.START_CHILD_WORKFLOW_EXECUTION_INITIATED: {
+                    const attrs = event.startChildWorkflowExecutionInitiatedEventAttributes;
+                    if (attrs) {
+                        if (attrs.workflowId in workflowMap) {
+                            // If the child workflow has already been started, update the existing entry
+                            const existingChildWorkflow = workflowMap[attrs.workflowId];
+                            existingChildWorkflow.startTime = event.eventTime;
+                            existingChildWorkflow.relatedEventIds = existingChildWorkflow.relatedEventIds || [];
+                            existingChildWorkflow.relatedEventIds.push(event.eventId);
+                            existingChildWorkflow.workflowTaskCompletedEventId = attrs.workflowTaskCompletedEventId;
+                        }else{
+                            const childWorkflow: Workflow = {
+                                type: 'childWorkflow',
+                                workflowId: attrs.workflowId,
+                                startTime: event.eventTime,
+                                status: 'RUNNING',
+                                parentWorkflowId: attrs.workflowId,
+                                // parentRunId: attrs.runId,
+                                workflowType: attrs.workflowType?.name,
+                                relatedEventIds: [event.eventId],
+                                workflowTaskCompletedEventId: attrs.workflowTaskCompletedEventId,
+                            };
+
+                            workflowMap[attrs.workflowId] = childWorkflow;
+                            chronologicalList.push(childWorkflow);
+                        }
                     }
                     break;
                 }
