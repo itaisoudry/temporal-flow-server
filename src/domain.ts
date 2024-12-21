@@ -15,7 +15,8 @@ export enum EventType {
     WORKFLOW_EXECUTION_CANCELED = "EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED",
     WORKFLOW_EXECUTION_TERMINATED = "EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED",
     START_CHILD_WORKFLOW_EXECUTION_INITIATED = "EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED",
-    CHILD_WORKFLOW_EXECUTION_STARTED = "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED"
+    CHILD_WORKFLOW_EXECUTION_STARTED = "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED",
+    CHILD_WORKFLOW_EXECUTION_COMPLETED = "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED"
 }
 
 export enum TaskQueueKind {
@@ -120,6 +121,19 @@ export interface ChildWorkflowExecutionStartedEventAttributes {
     };
 }
 
+export interface ChildWorkflowExecutionCompletedEventAttributes {
+    result: {
+        payloads: Payload[];
+    };
+    initiatedEventId: string;
+    startedEventId: string;
+    workflowExecution: {
+        workflowId: string;
+        runId: string;
+    }
+    workflowType: { name: string };
+}
+
 export interface ActivityTaskScheduledEventAttributes {
     activityId: string;
     activityType: { name: string };
@@ -206,8 +220,11 @@ export interface Event {
     workflowExecutionTimedOutEventAttributes?: WorkflowExecutionTimedOutEventAttributes;
     workflowExecutionCanceledEventAttributes?: WorkflowExecutionCanceledEventAttributes;
     workflowExecutionTerminatedEventAttributes?: WorkflowExecutionTerminatedEventAttributes;
+    // TODO find a way to combine all of these?
     startChildWorkflowExecutionInitiatedEventAttributes?: StartChildWorkflowExecutionInitiatedEventAttributes;
     childWorkflowExecutionStartedEventAttributes?: ChildWorkflowExecutionStartedEventAttributes;
+    childWorkflowExecutionCompletedEventAttributes?: ChildWorkflowExecutionCompletedEventAttributes;
+
 }
 
 export interface HistoryResponse {

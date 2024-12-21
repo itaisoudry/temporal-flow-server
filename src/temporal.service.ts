@@ -212,6 +212,7 @@ export default class TemporalService {
                             item.relatedEventIds = item.relatedEventIds || [];
                             item.relatedEventIds.push(event.eventId);
 
+
                             if (event.eventType === EventType.ACTIVITY_TASK_COMPLETED && event.activityTaskCompletedEventAttributes?.result?.payloads) {
                                 item.payload = event.activityTaskCompletedEventAttributes.result.payloads;
                             }
@@ -220,7 +221,21 @@ export default class TemporalService {
                     }
                     break;
                 }
+                case EventType.CHILD_WORKFLOW_EXECUTION_COMPLETED: {
+                    const attrs = event.childWorkflowExecutionCompletedEventAttributes;
+                    if (attrs && attrs.workflowExecution) {
+                        const childWfId = attrs.workflowExecution.workflowId;
 
+                        const childWorkflow = workflowMap[childWfId];
+                        if (childWorkflow) {
+                            childWorkflow.endTime = event.eventTime;
+                            childWorkflow.status = 'COMPLETED';
+                            childWorkflow.relatedEventIds = childWorkflow.relatedEventIds || [];
+                            childWorkflow.relatedEventIds.push(event.eventId);
+                        }
+                    }
+                    break;
+                }
                 case EventType.CHILD_WORKFLOW_EXECUTION_STARTED: {
                     const attrs = event.childWorkflowExecutionStartedEventAttributes;
                     if (attrs && attrs.workflowExecution) {
