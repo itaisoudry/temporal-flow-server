@@ -1,16 +1,6 @@
 import {Activity, ChronologicalItem, Event, EventType, HistoryResponse, ParseOptions, Workflow} from "./domain";
 
 
-export class TemporalWorkflowChronologicalItems {
-    rootWorkflow: ChronologicalItem[]
-    childWorkflows: Record<string, ChronologicalItem[]>
-
-    constructor(rootWorkflow: ChronologicalItem[], childWorkflows: Record<string, ChronologicalItem[]>) {
-        this.rootWorkflow = rootWorkflow;
-        this.childWorkflows = childWorkflows;
-    }
-}
-
 export default class TemporalService {
 
     apiKey: string
@@ -31,25 +21,7 @@ export default class TemporalService {
 
     async getRootWorkflowData(namespace: string, rootWorkflowId: string) {
         const historyResponse = await this.getWorkflowData(namespace, rootWorkflowId);
-
-        const childWorkflowsMap: Record<string, ChronologicalItem[]> = {};
-        const rootWorkflowChronologicalItems = this.parseTemporalHistory(historyResponse);
-
-        for (const item of rootWorkflowChronologicalItems) {
-            if (item.type === 'childWorkflow') {
-                const childWorkflowId = item.workflowId;
-                try {
-                    const childWorkflowHistoryResponse = await this.getWorkflowData(namespace, childWorkflowId);
-                    childWorkflowsMap[childWorkflowId] = this.parseTemporalHistory(childWorkflowHistoryResponse);
-                } catch (error) {
-                    console.error(`Failed to fetch child workflow history for ${childWorkflowId}`, error);
-                    // TODO replace with node that indicates missing data?
-                }
-
-            }
-        }
-
-        return new TemporalWorkflowChronologicalItems(rootWorkflowChronologicalItems, childWorkflowsMap);
+        return this.parseTemporalHistory(historyResponse);
     }
 
     private async getWorkflowData(namespace: string, workflowId: string) {
