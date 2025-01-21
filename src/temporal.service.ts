@@ -21,9 +21,10 @@ export default class TemporalService {
 
     async getRootWorkflowData(namespace: string, rootWorkflowId: string) {
         const historyResponse = await this.getWorkflowData(namespace, rootWorkflowId);
-        return this.parseTemporalHistory(historyResponse);
+        return this.parseTemporalHistory(historyResponse, namespace);
     }
 
+    // TODO: add request without history to get pending activities
     private async getWorkflowData(namespace: string, workflowId: string) {
         let baseUrl = `https://${this.endpoint}.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows/${workflowId}/history?next_page_token=`
         const headers=  {headers: {"Authorization": `Bearer ${this.apiKey}`}};
@@ -45,7 +46,7 @@ export default class TemporalService {
         return allEvents;
     }
 
-    parseTemporalHistory(events: Event[], options?: ParseOptions): ChronologicalItem[] {
+    parseTemporalHistory(events: Event[], namespace: string): ChronologicalItem[] {
         const chronologicalList: ChronologicalItem[] = [];
 
         const workflowMap: Record<string, Workflow> = {};
@@ -66,7 +67,15 @@ export default class TemporalService {
                             startTime: event.eventTime,
                             status: 'RUNNING',
                             relatedEventIds: [event.eventId],
-                            payload: attrs.input?.payloads,
+                            input: attrs.input?.payloads?.[0]?.data ? 
+                                Buffer.from(attrs.input.payloads[0].data, 'base64').toString() : 
+                                undefined,
+                            header: attrs.header,
+                            attempts: attrs.attempt,
+                            searchAttributes: attrs.searchAttributes,
+                            memo: attrs.memo,
+                            taskQueue: attrs.taskQueue,
+                            namespace: namespace,
                         };
 
                         workflowMap[attrs.workflowId] = wf;
@@ -122,6 +131,14 @@ export default class TemporalService {
                             activityType: attrs.activityType.name,
                             workflowId: topWorkflowId,
                             scheduleTime: event.eventTime,
+                            scheduleToCloseTimeout: attrs.scheduleToCloseTimeout,
+                            scheduleToStartTimeout: attrs.scheduleToStartTimeout,
+                            startToCloseTimeout: attrs.startToCloseTimeout,
+                            heartbeatTimeout: attrs.heartbeatTimeout,
+                            retryPolicy: attrs.retryPolicy,
+                            input: attrs.input?.payloads?.[0]?.data ? 
+                                Buffer.from(attrs.input.payloads[0].data, 'base64').toString() :
+                                undefined,
                             status: 'SCHEDULED',
                             relatedEventIds: [event.eventId],
                             workflowTaskCompletedEventId: attrs.workflowTaskCompletedEventId,
@@ -155,7 +172,7 @@ export default class TemporalService {
                     break;
                 }
 
-                case EventType.ACTIVITY_TASK_COMPLETED:
+                case EventType.ACTIVITY_TASK_COMPLETED: 
                 case EventType.ACTIVITY_TASK_FAILED:
                 case EventType.ACTIVITY_TASK_TIMED_OUT:
                 case EventType.ACTIVITY_TASK_CANCELED: {
@@ -186,7 +203,10 @@ export default class TemporalService {
 
 
                             if (event.eventType === EventType.ACTIVITY_TASK_COMPLETED && event.activityTaskCompletedEventAttributes?.result?.payloads) {
-                                item.payload = event.activityTaskCompletedEventAttributes.result.payloads;
+                                const payload = event.activityTaskCompletedEventAttributes.result.payloads[0];
+                                if (payload?.data) {
+                                    item.result = Buffer.from(payload.data, 'base64').toString();
+                                }
                             }
                             break;
                         }
@@ -231,6 +251,16 @@ export default class TemporalService {
                                 parentRunId: attrs.parentWorkflowExecution?.runId,
                                 workflowType: attrs.workflowType?.name,
                                 relatedEventIds: [event.eventId],
+                                input: attrs.input?.payloads?.[0]?.data ? 
+                                    Buffer.from(attrs.input.payloads[0].data, 'base64').toString() : 
+                                    undefined,
+                                header: attrs.header,
+                                memo: attrs.memo,
+                                namespace: attrs.namespace,
+                                taskQueue: attrs.taskQueue,
+                                workflowRunTimeout: attrs.workflowRunTimeout,
+                                workflowTaskTimeout: attrs.workflowTaskTimeout,
+                                workflowReusePolicy: attrs.workflowReusePolicy,
                             };
 
                             workflowMap[childWfId] = childWorkflow;
@@ -262,6 +292,11 @@ export default class TemporalService {
                                 workflowType: attrs.workflowType?.name,
                                 relatedEventIds: [event.eventId],
                                 workflowTaskCompletedEventId: attrs.workflowTaskCompletedEventId,
+                                namespace: attrs.namespace,
+                                taskQueue: attrs.taskQueue,
+                                workflowRunTimeout: attrs.workflowRunTimeout,
+                                workflowTaskTimeout: attrs.workflowTaskTimeout,
+                                workflowReusePolicy: attrs.workflowReusePolicy,
                             };
 
                             workflowMap[attrs.workflowId] = childWorkflow;

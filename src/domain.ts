@@ -39,11 +39,9 @@ export interface WorkflowExecutionStartedEventAttributes {
     firstExecutionRunId: string;
     attempt: number;
     firstWorkflowTaskBackoff: string;
-    header: {
-        fields: {
-            [key: string]: Payload;
-        };
-    };
+    header: Record<string, any>;
+    memo: Record<string, any>;
+    searchAttributes: Record<string, any>;
     workflowId: string;
 }
 
@@ -105,6 +103,12 @@ export interface StartChildWorkflowExecutionInitiatedEventAttributes {
     workflowId: string;
     workflowType: { name: string };
     workflowTaskCompletedEventId: string;
+    input?: { payloads?: Payload[] };
+    namespace: string;
+    taskQueue: { name: string; kind: TaskQueueKind };
+    workflowRunTimeout: string;
+    workflowTaskTimeout: string;
+    workflowReusePolicy: string;
     // additional fields as needed
 }
 
@@ -119,6 +123,14 @@ export interface ChildWorkflowExecutionStartedEventAttributes {
         workflowId: string;
         runId: string;
     };
+    namespace: string;
+    taskQueue: { name: string; kind: TaskQueueKind };
+    workflowRunTimeout: string;
+    workflowTaskTimeout: string;
+    workflowReusePolicy: string;
+    input?: { payloads?: Payload[] };
+    header: Record<string, any>;
+    memo: Record<string, any>;
 }
 
 export interface ChildWorkflowExecutionCompletedEventAttributes {
@@ -177,7 +189,7 @@ export interface ActivityTaskCompletedEventAttributes {
 export interface ActivityTaskFailedEventAttributes {
     scheduledEventId: string;
     startedEventId: string;
-    failure?: unknown;
+    failure?: {message: string, stackTrace: string};
 }
 
 export interface ActivityTaskTimedOutEventAttributes {
@@ -238,6 +250,19 @@ export interface ParseOptions {
     // Future options if needed
 }
 
+export type TaskQueue = {
+    name: string;
+    kind: TaskQueueKind;
+}
+
+export type RetryPolicy = {
+    initialInterval: string;
+    backoffCoefficient: number;
+    maximumInterval: string;
+    maximumAttempts: number;
+    nonRetryableErrorTypes: string[];
+}
+
 export type Activity = {
     type: 'activity';
     activityId: string;
@@ -247,9 +272,19 @@ export type Activity = {
     startTime?: string;
     endTime?: string;
     status?: string;
-    payload?: Payload[];
+    taskQueue?: TaskQueue;
+    input?: string;
+    result?: string;
+    header?: Record<string, any>;
+    retryPolicy?: RetryPolicy;
+    heartbeatTimeout?: string;
+    scheduleToCloseTimeout?: string;
+    scheduleToStartTimeout?: string;
+    startToCloseTimeout?: string;
     relatedEventIds?: string[];
     workflowTaskCompletedEventId?: string;
+    attempts?: number;
+    requestId?: string;
 };
 
 export type Workflow = {
@@ -257,14 +292,26 @@ export type Workflow = {
     workflowId: string;
     runId?: string; // If available
     workflowType?: string;
+    namespace?: string;
     startTime?: string;
     endTime?: string;
     status?: string;
     parentWorkflowId?: string;
     parentRunId?: string;
+    input?: string;
+    taskQueue?: TaskQueue;
     payload?: Payload[];
+    header?: Record<string, any>;
+    memo?: Record<string, any>;
+    searchAttributes?: Record<string, any>;
+    retryPolicy?: RetryPolicy;
+    startToCloseTimeout?: string;
+    attempts?: number;
     relatedEventIds?: string[];
     workflowTaskCompletedEventId?: string;
+    workflowRunTimeout?: string;
+    workflowTaskTimeout?: string;
+    workflowReusePolicy?: string;
 };
 
 export type ChronologicalItem = Workflow | Activity;
