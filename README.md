@@ -14,8 +14,8 @@ This will provider the needed data for the UI to display the workflow history.
 1. Clone the repository:
 
    ```bash
-   git clone <repository-url>
-   cd <repository-name>
+   git clone itaisoudry/temporal-flow-server
+   cd temporal-flow-server
    ```
 
 2. Install dependencies:
