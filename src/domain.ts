@@ -232,7 +232,6 @@ export interface Event {
     workflowExecutionTimedOutEventAttributes?: WorkflowExecutionTimedOutEventAttributes;
     workflowExecutionCanceledEventAttributes?: WorkflowExecutionCanceledEventAttributes;
     workflowExecutionTerminatedEventAttributes?: WorkflowExecutionTerminatedEventAttributes;
-    // TODO find a way to combine all of these?
     startChildWorkflowExecutionInitiatedEventAttributes?: StartChildWorkflowExecutionInitiatedEventAttributes;
     childWorkflowExecutionStartedEventAttributes?: ChildWorkflowExecutionStartedEventAttributes;
     childWorkflowExecutionCompletedEventAttributes?: ChildWorkflowExecutionCompletedEventAttributes;
@@ -247,7 +246,6 @@ export interface HistoryResponse {
 }
 
 export interface ParseOptions {
-    // Future options if needed
 }
 
 export type TaskQueue = {
