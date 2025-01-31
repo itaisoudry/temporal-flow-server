@@ -45,7 +45,7 @@ app.get(
         });
       }
     }
-  }
+    }
 );
 
 app.get("/health", (req, res) => {
