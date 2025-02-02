@@ -1,12 +1,14 @@
-# Temporal History API Server
+# Temporal Flow API Server
 
-This server provides an API to fetch and parse Temporal workflow history data in a more consumable format. It simplifies the process of analyzing workflow executions by providing a clean, chronological view of workflows and their activities.
+Try it out: [Temporal Flow Web](https://itaisoudrydry.github.io/temporal-flow-web)
+
+This server provides an API to fetch and parse Temporal workflow data in a more consumable format. It simplifies the process of analyzing workflow executions by providing a clean, chronological view of workflows and their activities.
 This will provider the needed data for the UI to display the workflow history.
 
 ## Prerequisites
 
 - Node.js (v16 or higher)
-- npm or yarn
+- npm
 - A Temporal Cloud account with API credentials
 
 ## Setup
@@ -22,8 +24,6 @@ This will provider the needed data for the UI to display the workflow history.
 
    ```bash
    npm install
-   # or
-   yarn install
    ```
 
 3. Create a `.env` file in the root directory with the following variables:
@@ -45,11 +45,13 @@ Start the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
 ```
 
-The server will start on port 7531. You should see the message:
+The server will start on port 7531
+
+Note: ATM the port is constant, but in the future it will be configurable, so don't change it.
+
+You should see the message:
 
 ```
 Server is running on port 7531
@@ -60,9 +62,6 @@ For production builds:
 ```bash
 npm run build
 npm start
-# or
-yarn build
-yarn start
 ```
 
 ## API Endpoints
@@ -118,4 +117,3 @@ npm run dev
 # or
 yarn dev
 ```
-
