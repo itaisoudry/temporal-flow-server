@@ -57,11 +57,33 @@ You should see the message:
 Server is running on port 7531
 ```
 
-For production builds:
+## Running with Docker
+
+### Build the Docker Image
 
 ```bash
-npm run build
-npm start
+docker build -t temporal-flow-server .
+```
+
+### Run the Container
+
+You can run the container using either environment variables or a .env file.
+
+Using environment variables:
+
+```bash
+docker run -p 7531:7531 \
+  -e TEMPORAL_API_KEY=your-api-key \
+  -e TEMPORAL_ENDPOINT=your-endpoint \
+  temporal-flow-server
+```
+
+Using a .env file:
+
+```bash
+docker run -p 7531:7531 \
+  --env-file .env \
+  temporal-flow-server
 ```
 
 ## API Endpoints
@@ -107,13 +129,3 @@ Common issues:
 1. **"Temporal API Key is required"**: Ensure your `.env` file contains the correct `TEMPORAL_API_KEY`
 2. **"Temporal Endpoint is required"**: Check that `TEMPORAL_ENDPOINT` is properly set in your `.env`
 3. **Connection errors**: Verify your API key has the correct permissions and your endpoint is correct
-
-## Development
-
-To run in development mode with hot reloading:
-
-```bash
-npm run dev
-# or
-yarn dev
-```
