@@ -6,13 +6,14 @@ import {
   HistoryResponse,
   ParseOptions,
   Workflow,
+  WorkflowResponse,
 } from "./domain";
 import { InternalServerError, NotFoundException } from "./excpetions";
 
 export default class TemporalService {
   apiKey: string;
   endpoint: string;
-
+  headers: Record<string, string>;
   constructor() {
     this.apiKey = process.env.TEMPORAL_API_KEY ?? "";
     this.endpoint = process.env.TEMPORAL_ENDPOINT ?? "";
@@ -24,21 +25,90 @@ export default class TemporalService {
     if (!this.endpoint) {
       throw new Error("Temporal Endpoint is required");
     }
+
+    this.headers = {
+      Authorization: `Bearer ${this.apiKey}`,
+    };
   }
 
   async getRootWorkflowData(namespace: string, rootWorkflowId: string) {
-    const historyResponse = await this.getWorkflowData(
+    const historyResponse = await this.getWorkflowHistoryData(
       namespace,
       rootWorkflowId
     );
-    return this.parseTemporalHistory(historyResponse, namespace);
+    const items = await this.parseTemporalHistory(historyResponse, namespace);
+
+    // Get additional data for non-completed workflows
+    for (const item of items) {
+      if (
+        (item.type === "workflow" || item.type === "childWorkflow") &&
+        item.status !== "COMPLETED"
+      ) {
+        const workflowData = await this.getWorkflowData(
+          namespace,
+          item.workflowId
+        );
+
+        if (workflowData.pendingActivities) {
+          for (const pendingActivity of workflowData.pendingActivities) {
+            const activityItem = items.find(
+              (item) =>
+                item.type === "activity" &&
+                item.activityId === pendingActivity.activityId
+            ) as Activity | undefined;
+
+            if (activityItem) {
+              activityItem.attempts = pendingActivity.attempt;
+              activityItem.lastStartedTime = pendingActivity.lastStartedTime;
+              activityItem.lastAttemptCompleteTime =
+                pendingActivity.lastAttemptCompleteTime;
+              activityItem.lastWorkerIdentity =
+                pendingActivity.lastWorkerIdentity;
+
+              if (pendingActivity.lastFailure) {
+                activityItem.lastFailureMessage =
+                  pendingActivity.lastFailure.message;
+                if (pendingActivity.lastFailure.cause) {
+                  activityItem.lastFailureStackTrace =
+                    pendingActivity.lastFailure.cause.stackTrace;
+                  activityItem.lastFailureCause =
+                    pendingActivity.lastFailure.cause.message;
+                  activityItem.lastFailureType =
+                    pendingActivity.lastFailure.cause.applicationFailureInfo?.type;
+                }
+                activityItem.lastFailureServerFailureInfo =
+                  pendingActivity.lastFailure.serverFailureInfo || {};
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return items;
   }
 
-  // TODO: add request without history to get pending activities
-  private async getWorkflowData(namespace: string, workflowId: string) {
-    let baseUrl = `https://${this.endpoint}.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows/${workflowId}/history?next_page_token=`;
-    const headers = { headers: { Authorization: `Bearer ${this.apiKey}` } };
+  private async getWorkflowData(
+    namespace: string,
+    workflowId: string
+  ): Promise<WorkflowResponse> {
+    const url = `https://${this.endpoint}.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows/${workflowId}`;
+    const response = await fetch(url, { headers: this.headers });
 
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new NotFoundException(`workflow ${workflowId} not found`);
+      }
+      throw new InternalServerError(
+        `Failed to fetch workflow data. Status: ${response.status}`
+      );
+    }
+
+    return await response.json();
+  }
+  // TODO: add request without history to get pending activities
+  private async getWorkflowHistoryData(namespace: string, workflowId: string) {
+    const baseUrl = `https://${this.endpoint}.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows/${workflowId}/history?next_page_token=`;
     const allEvents = [];
     let nextPageToken = null;
     do {
@@ -46,7 +116,7 @@ export default class TemporalService {
       let url = nextPageToken
         ? baseUrl + encodeURIComponent(nextPageToken)
         : baseUrl;
-      const response = await fetch(url, headers);
+      const response = await fetch(url, {"headers":this.headers});
       if (!response.ok) {
         if (response.status === 404) {
           throw new NotFoundException(`workflow ${workflowId} not found`);
@@ -63,7 +133,7 @@ export default class TemporalService {
     return allEvents;
   }
 
-  parseTemporalHistory(
+  private parseTemporalHistory(
     events: Event[],
     namespace: string
   ): ChronologicalItem[] {

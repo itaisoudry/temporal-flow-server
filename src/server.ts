@@ -32,6 +32,7 @@ app.get(
       const data = await temporal.getRootWorkflowData(namespace, id);
       res.status(200).json(data);
     } catch (error) {
+      console.error(error);
       if (error instanceof NotFoundException) {
         res.status(404).json({
           error: error.message,
@@ -45,7 +46,7 @@ app.get(
         });
       }
     }
-    }
+  }
 );
 
 app.get("/health", (req, res) => {
