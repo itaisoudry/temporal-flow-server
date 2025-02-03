@@ -59,6 +59,12 @@ export default class TemporalService {
 
             if (activityItem) {
               activityItem.attempts = pendingActivity.attempt;
+              if (activityItem.attempts > 1) {
+                activityItem.status = "RETRYING";
+              }
+              if (activityItem.status == "SCHEDULED") {
+                activityItem.status = "PENDING";
+              }
               activityItem.lastStartedTime = pendingActivity.lastStartedTime;
               activityItem.lastAttemptCompleteTime =
                 pendingActivity.lastAttemptCompleteTime;
@@ -116,7 +122,7 @@ export default class TemporalService {
       let url = nextPageToken
         ? baseUrl + encodeURIComponent(nextPageToken)
         : baseUrl;
-      const response = await fetch(url, {"headers":this.headers});
+      const response = await fetch(url, { headers: this.headers });
       if (!response.ok) {
         if (response.status === 404) {
           throw new NotFoundException(`workflow ${workflowId} not found`);
