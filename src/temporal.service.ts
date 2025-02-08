@@ -55,9 +55,9 @@ export default class TemporalService {
         item.startTime = workflowData.workflowExecutionInfo.startTime;
         item.endTime = workflowData.workflowExecutionInfo.closeTime;
         item.parentWorkflowId =
-          workflowData.workflowExecutionInfo.parentExecution.workflowId;
+          workflowData.workflowExecutionInfo?.parentExecution?.workflowId;
         item.parentRunId =
-          workflowData.workflowExecutionInfo.parentExecution.runId;
+          workflowData.workflowExecutionInfo?.parentExecution?.runId;
         if (workflowData.pendingActivities) {
           for (const pendingActivity of workflowData.pendingActivities) {
             const activityItem = items.find(
@@ -148,6 +148,34 @@ export default class TemporalService {
     return allEvents;
   }
 
+  private parsePayloads(
+    payloads?: { metadata?: Record<string, string>; data?: string }[]
+  ): string | undefined {
+    if (!payloads || payloads.length === 0) {
+      return undefined;
+    }
+
+    // If single payload, return decoded string
+    if (payloads.length === 1) {
+      return payloads[0]?.data
+        ? Buffer.from(payloads[0].data, "base64").toString()
+        : undefined;
+    }
+
+    // If multiple payloads, convert to JSON array string
+    const decodedPayloads = payloads
+      .map((payload) =>
+        payload?.data
+          ? Buffer.from(payload.data, "base64").toString()
+          : undefined
+      )
+      .filter((payload): payload is string => payload !== undefined);
+
+    return decodedPayloads.length > 0
+      ? `[${decodedPayloads.join(", ")}]`
+      : undefined;
+  }
+
   private parseTemporalHistory(
     events: Event[],
     namespace: string
@@ -172,9 +200,7 @@ export default class TemporalService {
               startTime: event.eventTime,
               status: "RUNNING",
               relatedEventIds: [event.eventId],
-              input: attrs.input?.payloads?.[0]?.data
-                ? Buffer.from(attrs.input.payloads[0].data, "base64").toString()
-                : undefined,
+              input: this.parsePayloads(attrs.input?.payloads),
               header: attrs.header,
               attempts: attrs.attempt,
               searchAttributes: attrs.searchAttributes,
@@ -225,9 +251,7 @@ export default class TemporalService {
               startToCloseTimeout: attrs.startToCloseTimeout,
               heartbeatTimeout: attrs.heartbeatTimeout,
               retryPolicy: attrs.retryPolicy,
-              input: attrs.input?.payloads?.[0]?.data
-                ? Buffer.from(attrs.input.payloads[0].data, "base64").toString()
-                : undefined,
+              input: this.parsePayloads(attrs.input?.payloads),
               status: "SCHEDULED",
               relatedEventIds: [event.eventId],
               workflowTaskCompletedEventId: attrs.workflowTaskCompletedEventId,
@@ -283,11 +307,17 @@ export default class TemporalService {
                 event.eventType === EventType.ACTIVITY_TASK_COMPLETED &&
                 event.activityTaskCompletedEventAttributes?.result?.payloads
               ) {
-                const payload =
-                  event.activityTaskCompletedEventAttributes.result.payloads[0];
-                if (payload?.data) {
-                  item.result = Buffer.from(payload.data, "base64").toString();
-                }
+                item.result = this.parsePayloads(
+                  event.activityTaskCompletedEventAttributes.result.payloads
+                );
+              }
+              if (event.activityTaskFailedEventAttributes) {
+                item.lastFailureMessage =
+                  event.activityTaskFailedEventAttributes.failure?.message;
+                item.lastFailureStackTrace =
+                  event.activityTaskFailedEventAttributes.failure?.stackTrace;
+                item.lastFailureType =
+                  event.activityTaskFailedEventAttributes.failure?.applicationFailureInfo?.type;
               }
               break;
             }
@@ -334,12 +364,7 @@ export default class TemporalService {
                 parentRunId: attrs.parentWorkflowExecution?.runId,
                 workflowType: attrs.workflowType?.name,
                 relatedEventIds: [event.eventId],
-                input: attrs.input?.payloads?.[0]?.data
-                  ? Buffer.from(
-                      attrs.input.payloads[0].data,
-                      "base64"
-                    ).toString()
-                  : undefined,
+                input: this.parsePayloads(attrs.input?.payloads),
                 header: attrs.header,
                 memo: attrs.memo,
                 namespace: attrs.namespace,

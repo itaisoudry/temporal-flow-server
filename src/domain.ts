@@ -183,6 +183,7 @@ export interface ActivityTaskStartedEventAttributes {
   workerVersion: {
     buildId: string;
   };
+  
 }
 
 export interface ActivityTaskCompletedEventAttributes {
@@ -197,7 +198,7 @@ export interface ActivityTaskCompletedEventAttributes {
 export interface ActivityTaskFailedEventAttributes {
   scheduledEventId: string;
   startedEventId: string;
-  failure?: { message: string; stackTrace: string };
+  failure?: { message: string; stackTrace: string, applicationFailureInfo?: {type: string}};
 }
 
 export interface ActivityTaskTimedOutEventAttributes {
