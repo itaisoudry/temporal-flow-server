@@ -1,26 +1,27 @@
-# Use Node.js LTS (Long Term Support) image as the base
-FROM node:20-slim
+FROM node:20-slim AS builder
 
-# Create app directory
 WORKDIR /usr/src/app
 
-# Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+RUN npm ci
 
-# Copy app source
 COPY . .
 
-# Build the application (if needed)
 RUN npm run build
 
-# Expose the port the app runs on
+FROM node:20-slim
+
+WORKDIR /usr/src/app
+
+COPY package*.json ./
+
+RUN npm ci --only=production
+
+COPY --from=builder /usr/src/app/dist ./dist
+
 EXPOSE 7531
 
-# Set NODE_ENV to production
 ENV NODE_ENV=production
 
-# Start the server
 CMD ["npm", "start"] 
