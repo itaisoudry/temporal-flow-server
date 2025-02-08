@@ -43,6 +43,14 @@ export interface WorkflowExecutionStartedEventAttributes {
   memo: Record<string, any>;
   searchAttributes: Record<string, any>;
   workflowId: string;
+  parentWorkflowExecution?: {
+    workflowId: string;
+    runId: string;
+  };
+  rootWorkflowExecution?: {
+    workflowId: string;
+    runId: string;
+  };
 }
 
 export interface WorkflowTaskScheduledEventAttributes {
@@ -320,7 +328,6 @@ export type Workflow = {
 
 export type ChronologicalItem = Workflow | Activity;
 
-
 export interface PendingChildWorkflow {
   workflowId: string;
   runId: string;
@@ -337,8 +344,7 @@ export interface ApplicationFailureInfo {
   type: string;
 }
 
-export interface ServerFailureInfo {
-}
+export interface ServerFailureInfo {}
 
 export interface ActivityFailure {
   message: string;
@@ -362,7 +368,19 @@ export interface PendingActivity {
   lastAttemptCompleteTime: string;
 }
 
+export interface WorkflowExecutionInfo {
+  status: string;
+  startTime: string;
+  closeTime: string;
+  parentExecution: {
+    workflowId: string;
+    runId: string;
+  };
+  parentNamespaceId: string;
+}
+
 export interface WorkflowResponse {
   pendingChildren: PendingChildWorkflow[];
   pendingActivities?: PendingActivity[];
+  workflowExecutionInfo: WorkflowExecutionInfo;
 }

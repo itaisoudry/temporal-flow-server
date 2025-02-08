@@ -49,6 +49,15 @@ export default class TemporalService {
           item.workflowId
         );
 
+        item.status = this.convertWorkflowStatusToStatus(
+          workflowData.workflowExecutionInfo.status
+        );
+        item.startTime = workflowData.workflowExecutionInfo.startTime;
+        item.endTime = workflowData.workflowExecutionInfo.closeTime;
+        item.parentWorkflowId =
+          workflowData.workflowExecutionInfo.parentExecution.workflowId;
+        item.parentRunId =
+          workflowData.workflowExecutionInfo.parentExecution.runId;
         if (workflowData.pendingActivities) {
           for (const pendingActivity of workflowData.pendingActivities) {
             const activityItem = items.find(
@@ -172,6 +181,7 @@ export default class TemporalService {
               memo: attrs.memo,
               taskQueue: attrs.taskQueue,
               namespace: namespace,
+              parentWorkflowId: attrs.parentWorkflowExecution?.workflowId,
             };
 
             workflowMap[attrs.workflowId] = wf;
@@ -193,24 +203,7 @@ export default class TemporalService {
             wf.endTime = event.eventTime;
             wf.relatedEventIds = wf.relatedEventIds || [];
             wf.relatedEventIds.push(event.eventId);
-
-            switch (event.eventType) {
-              case EventType.WORKFLOW_EXECUTION_COMPLETED:
-                wf.status = "COMPLETED";
-                break;
-              case EventType.WORKFLOW_EXECUTION_FAILED:
-                wf.status = "FAILED";
-                break;
-              case EventType.WORKFLOW_EXECUTION_TIMED_OUT:
-                wf.status = "TIMED_OUT";
-                break;
-              case EventType.WORKFLOW_EXECUTION_CANCELED:
-                wf.status = "CANCELED";
-                break;
-              case EventType.WORKFLOW_EXECUTION_TERMINATED:
-                wf.status = "TERMINATED";
-                break;
-            }
+            wf.status = this.convertEventTypeToStatus(event.eventType);
           }
           workflowStack.pop();
           break;
@@ -273,21 +266,6 @@ export default class TemporalService {
         case EventType.ACTIVITY_TASK_TIMED_OUT:
         case EventType.ACTIVITY_TASK_CANCELED: {
           const topWorkflowId = workflowStack[workflowStack.length - 1];
-          let newStatus: string;
-          switch (event.eventType) {
-            case EventType.ACTIVITY_TASK_COMPLETED:
-              newStatus = "COMPLETED";
-              break;
-            case EventType.ACTIVITY_TASK_FAILED:
-              newStatus = "FAILED";
-              break;
-            case EventType.ACTIVITY_TASK_TIMED_OUT:
-              newStatus = "TIMED_OUT";
-              break;
-            case EventType.ACTIVITY_TASK_CANCELED:
-              newStatus = "CANCELED";
-              break;
-          }
 
           for (let i = chronologicalList.length - 1; i >= 0; i--) {
             const item = chronologicalList[i];
@@ -297,7 +275,7 @@ export default class TemporalService {
               (item.status === "STARTED" || item.status === "SCHEDULED")
             ) {
               item.endTime = event.eventTime;
-              item.status = newStatus;
+              item.status = this.convertEventTypeToStatus(event.eventType);
               item.relatedEventIds = item.relatedEventIds || [];
               item.relatedEventIds.push(event.eventId);
 
@@ -393,13 +371,13 @@ export default class TemporalService {
               existingChildWorkflow.workflowTaskCompletedEventId =
                 attrs.workflowTaskCompletedEventId;
             } else {
+              const currentWorkflowId = workflowStack[workflowStack.length - 1];
               const childWorkflow: Workflow = {
                 type: "childWorkflow",
                 workflowId: attrs.workflowId,
                 startTime: event.eventTime,
-                status: "RUNNING",
-                parentWorkflowId: attrs.workflowId,
-                // parentRunId: attrs.runId,
+                status: "INITIATED",
+                parentWorkflowId: currentWorkflowId,
                 workflowType: attrs.workflowType?.name,
                 relatedEventIds: [event.eventId],
                 workflowTaskCompletedEventId:
@@ -424,5 +402,56 @@ export default class TemporalService {
     }
 
     return chronologicalList;
+  }
+
+  private convertEventTypeToStatus(status: string) {
+    switch (status) {
+      case "EVENT_TYPE_WORKFLOW_EXECUTION_STARTED":
+      case "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED":
+      case "EVENT_TYPE_ACTIVITY_TASK_STARTED":
+        return "RUNNING";
+      case "EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED":
+      case "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED":
+      case "EVENT_TYPE_ACTIVITY_TASK_COMPLETED":
+        return "COMPLETED";
+      case "EVENT_TYPE_WORKFLOW_EXECUTION_FAILED":
+      case "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED":
+      case "EVENT_TYPE_ACTIVITY_TASK_FAILED":
+        return "FAILED";
+      case "EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT":
+      case "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT":
+      case "EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT":
+        return "TIMED_OUT";
+      case "EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED":
+      case "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED":
+      case "EVENT_TYPE_ACTIVITY_TASK_CANCELED":
+        return "CANCELED";
+      case "EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED":
+      case "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED":
+        return "TERMINATED";
+      case "EVENT_TYPE_ACTIVITY_TASK_SCHEDULED":
+        return "SCHEDULED";
+      default:
+        return status;
+    }
+  }
+
+  private convertWorkflowStatusToStatus(status: string) {
+    switch (status) {
+      case "WORKFLOW_EXECUTION_STATUS_RUNNING":
+        return "RUNNING";
+      case "WORKFLOW_EXECUTION_STATUS_COMPLETED":
+        return "COMPLETED";
+      case "WORKFLOW_EXECUTION_STATUS_FAILED":
+        return "FAILED";
+      case "WORKFLOW_EXECUTION_STATUS_TIMED_OUT":
+        return "TIMED_OUT";
+      case "WORKFLOW_EXECUTION_STATUS_CANCELED":
+        return "CANCELED";
+      case "WORKFLOW_EXECUTION_STATUS_TERMINATED":
+        return "TERMINATED";
+      default:
+        return status;
+    }
   }
 }
