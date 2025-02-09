@@ -81,18 +81,9 @@ export default class TemporalService {
                 pendingActivity.lastWorkerIdentity;
 
               if (pendingActivity.lastFailure) {
-                activityItem.lastFailureMessage =
-                  pendingActivity.lastFailure.message;
-                if (pendingActivity.lastFailure.cause) {
-                  activityItem.lastFailureStackTrace =
-                    pendingActivity.lastFailure.cause.stackTrace;
-                  activityItem.lastFailureCause =
-                    pendingActivity.lastFailure.cause.message;
-                  activityItem.lastFailureType =
-                    pendingActivity.lastFailure.cause.applicationFailureInfo?.type;
-                }
-                activityItem.lastFailureServerFailureInfo =
-                  pendingActivity.lastFailure.serverFailureInfo || {};
+                activityItem.lastFailure = JSON.stringify(
+                  pendingActivity.lastFailure
+                );
               }
             }
           }
@@ -123,7 +114,7 @@ export default class TemporalService {
   }
   // TODO: add request without history to get pending activities
   private async getWorkflowHistoryData(namespace: string, workflowId: string) {
-    const baseUrl = `https://${this.endpoint}.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows/${workflowId}/history?next_page_token=`;
+    const baseUrl = `https://${this.endpoint}.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows/${encodeURIComponent(workflowId)}/history?next_page_token=`;
     const allEvents = [];
     let nextPageToken = null;
     do {
@@ -159,7 +150,7 @@ export default class TemporalService {
     if (payloads.length === 1) {
       return payloads[0]?.data
         ? Buffer.from(payloads[0].data, "base64").toString()
-        : undefined;
+        : "null";
     }
 
     // If multiple payloads, convert to JSON array string
@@ -167,7 +158,7 @@ export default class TemporalService {
       .map((payload) =>
         payload?.data
           ? Buffer.from(payload.data, "base64").toString()
-          : undefined
+          : "null"
       )
       .filter((payload): payload is string => payload !== undefined);
 
@@ -232,6 +223,15 @@ export default class TemporalService {
             wf.status = this.convertEventTypeToStatus(event.eventType);
           }
           workflowStack.pop();
+
+          if (event.eventType === EventType.WORKFLOW_EXECUTION_COMPLETED) {
+            wf.result = this.parsePayloads(
+              event.workflowExecutionCompletedEventAttributes?.result?.payloads
+            );
+          }
+          if (event.eventType === EventType.WORKFLOW_EXECUTION_FAILED) {
+            wf.result = JSON.stringify(event.workflowExecutionFailedEventAttributes)
+          }
           break;
         }
 
@@ -271,13 +271,20 @@ export default class TemporalService {
               const item = chronologicalList[i];
               if (
                 item.type === "activity" &&
-                item.workflowId === topWorkflowId &&
-                item.status === "SCHEDULED"
+                item.workflowId === topWorkflowId
               ) {
+                if (item.status === "SCHEDULED") {
+                  item.status = "STARTED";
+                }
                 item.startTime = event.eventTime;
-                item.status = "STARTED";
                 item.relatedEventIds = item.relatedEventIds || [];
                 item.relatedEventIds.push(event.eventId);
+
+                if (event.activityTaskStartedEventAttributes?.lastFailure) {
+                  item.lastFailure = JSON.stringify(
+                    event.activityTaskStartedEventAttributes.lastFailure
+                  );
+                }
                 break;
               }
             }
@@ -295,8 +302,7 @@ export default class TemporalService {
             const item = chronologicalList[i];
             if (
               item.type === "activity" &&
-              item.workflowId === topWorkflowId &&
-              (item.status === "STARTED" || item.status === "SCHEDULED")
+              item.workflowId === topWorkflowId 
             ) {
               item.endTime = event.eventTime;
               item.status = this.convertEventTypeToStatus(event.eventType);
@@ -312,12 +318,9 @@ export default class TemporalService {
                 );
               }
               if (event.activityTaskFailedEventAttributes) {
-                item.lastFailureMessage =
-                  event.activityTaskFailedEventAttributes.failure?.message;
-                item.lastFailureStackTrace =
-                  event.activityTaskFailedEventAttributes.failure?.stackTrace;
-                item.lastFailureType =
-                  event.activityTaskFailedEventAttributes.failure?.applicationFailureInfo?.type;
+                item.failure = JSON.stringify(
+                  event.activityTaskFailedEventAttributes.failure
+                );
               }
               break;
             }
