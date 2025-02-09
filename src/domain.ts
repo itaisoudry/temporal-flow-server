@@ -183,7 +183,7 @@ export interface ActivityTaskStartedEventAttributes {
   workerVersion: {
     buildId: string;
   };
-  
+  lastFailure?: Record<string, any>;
 }
 
 export interface ActivityTaskCompletedEventAttributes {
@@ -290,14 +290,11 @@ export type Activity = {
   workflowTaskCompletedEventId?: string;
   attempts?: number;
   requestId?: string;
+  failure?: string;
+  lastFailure?: string;
   lastStartedTime?: string;
   lastAttemptCompleteTime?: string;
   lastWorkerIdentity?: string;
-  lastFailureMessage?: string;
-  lastFailureStackTrace?: string;
-  lastFailureCause?: string;
-  lastFailureServerFailureInfo?: Record<string, any>;
-  lastFailureType?: string;
 };
 
 export type Workflow = {
@@ -312,6 +309,7 @@ export type Workflow = {
   parentWorkflowId?: string;
   parentRunId?: string;
   input?: string;
+  result?: string;
   taskQueue?: TaskQueue;
   payload?: Payload[];
   header?: Record<string, any>;
