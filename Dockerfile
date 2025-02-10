@@ -1,4 +1,4 @@
-FROM node:20-slim AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /usr/src/app
 
@@ -10,7 +10,12 @@ COPY . .
 
 RUN npm run build
 
-FROM node:20-slim
+
+FROM node:20-alpine
+
+# install tini - to make sure there's init process to cleanup node app
+RUN apk add --no-cache tini
+ENTRYPOINT [ "/sbin/tini", "--" ]
 
 WORKDIR /usr/src/app
 
@@ -24,4 +29,4 @@ EXPOSE 7531
 
 ENV NODE_ENV=production
 
-CMD ["npm", "start"] 
+CMD ["npm", "start"]

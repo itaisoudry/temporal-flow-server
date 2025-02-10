@@ -1,6 +1,6 @@
 import express, { Request, Response } from "express";
 import Temporal from "./temporal.service";
-import { NotFoundException, InternalServerError } from "./excpetions";
+import { NotFoundException } from "./excpetions";
 
 const PORT = 7531; // Uncommon port number
 

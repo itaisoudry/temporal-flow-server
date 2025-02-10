@@ -19,11 +19,11 @@ export default class TemporalService {
     this.endpoint = process.env.TEMPORAL_ENDPOINT ?? "";
 
     if (!this.apiKey) {
-      throw new Error("Temporal API Key is required");
+      throw new Error("Temporal API Key is required - set TEMPORAL_API_KEY envvar");
     }
 
     if (!this.endpoint) {
-      throw new Error("Temporal Endpoint is required");
+      throw new Error("Temporal Endpoint is required - set TEMPORAL_ENDPOINT envvar");
     }
 
     this.headers = {
