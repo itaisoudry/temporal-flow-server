@@ -112,6 +112,7 @@ export default class TemporalService {
 
     return await response.json();
   }
+  
   // TODO: add request without history to get pending activities
   private async getWorkflowHistoryData(namespace: string, workflowId: string) {
     const baseUrl = `https://${this.endpoint}.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows/${encodeURIComponent(workflowId)}/history?next_page_token=`;
