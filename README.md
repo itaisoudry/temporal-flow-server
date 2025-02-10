@@ -59,6 +59,16 @@ Server is running on port 7531
 
 ## Running with Docker
 
+### Pulling from latest available image
+
+```bash
+docker run -p 7531:7531 \
+  -e TEMPORAL_API_KEY=your-api-key \
+  -e TEMPORAL_ENDPOINT=your-endpoint \
+  ghcr.io/itaisoudry/temporal-flow-server:main
+```
+
+
 ### Build the Docker Image
 
 ```bash
