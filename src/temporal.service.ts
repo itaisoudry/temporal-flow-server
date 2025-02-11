@@ -211,6 +211,7 @@ export default class TemporalService {
               firstExecutionRunId: attrs.firstExecutionRunId,
               workflowTaskTimeout: attrs.workflowTaskTimeout,
               workflowRunTimeout: attrs.workflowRunTimeout,
+              taskId: event.taskId,
             };
 
             chronologicalList.push(wf);
@@ -267,6 +268,7 @@ export default class TemporalService {
               status: "SCHEDULED",
               relatedEventIds: [event.eventId],
               workflowTaskCompletedEventId: attrs.workflowTaskCompletedEventId,
+              taskId: event.taskId,
             };
             activityMap[event.eventId] = act;
             chronologicalList.push(act);
@@ -377,6 +379,7 @@ export default class TemporalService {
                 header: attrs.header,
                 memo: attrs.memo,
                 searchAttributes: attrs.searchAttributes,
+                taskId: event.taskId,
               };
 
               childWorkflowsMap[event.eventId] = childWorkflow;

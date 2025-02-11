@@ -297,6 +297,7 @@ export type Activity = {
   lastStartedTime?: string;
   lastAttemptCompleteTime?: string;
   lastWorkerIdentity?: string;
+  taskId?: string;
 };
 
 export type Workflow = {
@@ -328,6 +329,7 @@ export type Workflow = {
   workflowRunTimeout?: string;
   workflowTaskTimeout?: string;
   workflowReusePolicy?: string;
+  taskId?: string;
 };
 
 export type ChronologicalItem = Workflow | Activity;
