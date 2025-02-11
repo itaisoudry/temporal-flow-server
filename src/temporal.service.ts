@@ -5,6 +5,7 @@ import {
   EventType,
   HistoryResponse,
   ParseOptions,
+  TaskQueueKind,
   Workflow,
   WorkflowResponse,
 } from "./domain";
@@ -19,11 +20,15 @@ export default class TemporalService {
     this.endpoint = process.env.TEMPORAL_ENDPOINT ?? "";
 
     if (!this.apiKey) {
-      throw new Error("Temporal API Key is required - set TEMPORAL_API_KEY envvar");
+      throw new Error(
+        "Temporal API Key is required - set TEMPORAL_API_KEY envvar"
+      );
     }
 
     if (!this.endpoint) {
-      throw new Error("Temporal Endpoint is required - set TEMPORAL_ENDPOINT envvar");
+      throw new Error(
+        "Temporal Endpoint is required - set TEMPORAL_ENDPOINT envvar"
+      );
     }
 
     this.headers = {
@@ -36,7 +41,7 @@ export default class TemporalService {
       namespace,
       rootWorkflowId
     );
-    const items = await this.parseTemporalHistory(historyResponse, namespace);
+    const items = await this.parseTemporalHistory(historyResponse, namespace, rootWorkflowId);
 
     // Get additional data for non-completed workflows
     for (const item of items) {
@@ -56,7 +61,7 @@ export default class TemporalService {
         item.endTime = workflowData.workflowExecutionInfo.closeTime;
         item.parentWorkflowId =
           workflowData.workflowExecutionInfo?.parentExecution?.workflowId;
-        item.parentRunId =
+        item.parentWorkflowRunId =
           workflowData.workflowExecutionInfo?.parentExecution?.runId;
         if (workflowData.pendingActivities) {
           for (const pendingActivity of workflowData.pendingActivities) {
@@ -112,10 +117,14 @@ export default class TemporalService {
 
     return await response.json();
   }
-  
+
   // TODO: add request without history to get pending activities
   private async getWorkflowHistoryData(namespace: string, workflowId: string) {
-    const baseUrl = `https://${this.endpoint}.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows/${encodeURIComponent(workflowId)}/history?next_page_token=`;
+    const baseUrl = `https://${
+      this.endpoint
+    }.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows/${encodeURIComponent(
+      workflowId
+    )}/history?next_page_token=`;
     const allEvents = [];
     let nextPageToken = null;
     do {
@@ -157,9 +166,7 @@ export default class TemporalService {
     // If multiple payloads, convert to JSON array string
     const decodedPayloads = payloads
       .map((payload) =>
-        payload?.data
-          ? Buffer.from(payload.data, "base64").toString()
-          : "null"
+        payload?.data ? Buffer.from(payload.data, "base64").toString() : "null"
       )
       .filter((payload): payload is string => payload !== undefined);
 
@@ -170,14 +177,12 @@ export default class TemporalService {
 
   private parseTemporalHistory(
     events: Event[],
-    namespace: string
+    namespace: string,
+    rootWorkflowId: string
   ): ChronologicalItem[] {
     const chronologicalList: ChronologicalItem[] = [];
-
-    const workflowMap: Record<string, Workflow> = {};
+    const childWorkflowsMap: Record<string, Workflow> = {};
     const activityMap: Record<string, Activity> = {};
-    // We'll track the currently active workflows. The top of the stack is the one to which activities are attributed.
-    const workflowStack: string[] = [];
 
     for (const event of events) {
       switch (event.eventType) {
@@ -200,11 +205,15 @@ export default class TemporalService {
               taskQueue: attrs.taskQueue,
               namespace: namespace,
               parentWorkflowId: attrs.parentWorkflowExecution?.workflowId,
+              parentWorkflowRunId: attrs.parentWorkflowExecution?.runId,
+              parentWorkflowNamespace: attrs.parentWorkflowNamespace,
+              originalExecutionRunId: attrs.originalExecutionRunId,
+              firstExecutionRunId: attrs.firstExecutionRunId,
+              workflowTaskTimeout: attrs.workflowTaskTimeout,
+              workflowRunTimeout: attrs.workflowRunTimeout,
             };
 
-            workflowMap[attrs.workflowId] = wf;
             chronologicalList.push(wf);
-            workflowStack.push(attrs.workflowId);
           }
           break;
         }
@@ -214,16 +223,13 @@ export default class TemporalService {
         case EventType.WORKFLOW_EXECUTION_TIMED_OUT:
         case EventType.WORKFLOW_EXECUTION_CANCELED:
         case EventType.WORKFLOW_EXECUTION_TERMINATED: {
-          // These are terminal states for the currently active workflow
-          const topWorkflowId = workflowStack[workflowStack.length - 1];
-          const wf = workflowMap[topWorkflowId];
+          const wf = chronologicalList[0] as Workflow;
           if (wf) {
             wf.endTime = event.eventTime;
             wf.relatedEventIds = wf.relatedEventIds || [];
             wf.relatedEventIds.push(event.eventId);
             wf.status = this.convertEventTypeToStatus(event.eventType);
           }
-          workflowStack.pop();
 
           if (event.eventType === EventType.WORKFLOW_EXECUTION_COMPLETED) {
             wf.result = this.parsePayloads(
@@ -231,21 +237,26 @@ export default class TemporalService {
             );
           }
           if (event.eventType === EventType.WORKFLOW_EXECUTION_FAILED) {
-            wf.result = JSON.stringify(event.workflowExecutionFailedEventAttributes)
+            wf.result = JSON.stringify(
+              event.workflowExecutionFailedEventAttributes
+            );
+          }
+          if(event.eventType === EventType.WORKFLOW_EXECUTION_TERMINATED) {
+            wf.result = JSON.stringify(
+              event.workflowExecutionTerminatedEventAttributes
+            );
           }
           break;
         }
 
         case EventType.ACTIVITY_TASK_SCHEDULED: {
-          const topWorkflowId = workflowStack[workflowStack.length - 1];
           const attrs = event.activityTaskScheduledEventAttributes;
-          if (attrs && topWorkflowId) {
-            const activityIdKey = `${topWorkflowId}:${attrs.activityId}`;
+          if (attrs) {
             const act: Activity = {
               type: "activity",
               activityId: attrs.activityId,
               activityType: attrs.activityType.name,
-              workflowId: topWorkflowId,
+              workflowId: rootWorkflowId,
               scheduleTime: event.eventTime,
               scheduleToCloseTimeout: attrs.scheduleToCloseTimeout,
               scheduleToStartTimeout: attrs.scheduleToStartTimeout,
@@ -257,7 +268,7 @@ export default class TemporalService {
               relatedEventIds: [event.eventId],
               workflowTaskCompletedEventId: attrs.workflowTaskCompletedEventId,
             };
-            activityMap[activityIdKey] = act;
+            activityMap[event.eventId] = act;
             chronologicalList.push(act);
           }
           break;
@@ -266,121 +277,79 @@ export default class TemporalService {
         case EventType.ACTIVITY_TASK_STARTED: {
           const attrs = event.activityTaskStartedEventAttributes;
           if (attrs) {
-            const topWorkflowId = workflowStack[workflowStack.length - 1];
-            // Find last scheduled activity without a startTime
-            for (let i = chronologicalList.length - 1; i >= 0; i--) {
-              const item = chronologicalList[i];
-              if (
-                item.type === "activity" &&
-                item.workflowId === topWorkflowId
-              ) {
-                if (item.status === "SCHEDULED") {
-                  item.status = "STARTED";
-                }
-                item.startTime = event.eventTime;
-                item.relatedEventIds = item.relatedEventIds || [];
-                item.relatedEventIds.push(event.eventId);
+            const item = activityMap[attrs.scheduledEventId];
+            if (item.status === "SCHEDULED") {
+              item.status = "STARTED";
+            }
+            item.startTime = event.eventTime;
+            item.relatedEventIds = item.relatedEventIds || [];
+            item.relatedEventIds.push(event.eventId);
 
-                if (event.activityTaskStartedEventAttributes?.lastFailure) {
-                  item.lastFailure = JSON.stringify(
-                    event.activityTaskStartedEventAttributes.lastFailure
-                  );
-                }
-                break;
-              }
+            if (event.activityTaskStartedEventAttributes?.lastFailure) {
+              item.lastFailure = JSON.stringify(
+                event.activityTaskStartedEventAttributes.lastFailure
+              );
             }
           }
           break;
         }
 
-        case EventType.ACTIVITY_TASK_COMPLETED:
-        case EventType.ACTIVITY_TASK_FAILED:
-        case EventType.ACTIVITY_TASK_TIMED_OUT:
+        case EventType.ACTIVITY_TASK_COMPLETED:{
+          const attrs = event.activityTaskCompletedEventAttributes
+          if(attrs) {
+            const item = activityMap[attrs.scheduledEventId];
+            if(item) {
+              item.endTime = event.eventTime;
+              item.status = "COMPLETED";
+              item.relatedEventIds = item.relatedEventIds || [];
+              item.relatedEventIds.push(event.eventId);
+              item.result = this.parsePayloads(
+                attrs.result?.payloads
+              );
+            }
+          }
+          
+          break;
+        }
+        case EventType.ACTIVITY_TASK_FAILED:{
+          const attrs = event.activityTaskFailedEventAttributes
+          if(attrs) {
+            const item = activityMap[attrs.scheduledEventId];
+            if(item) {
+              item.endTime = event.eventTime;
+              item.status = "FAILED";
+              item.relatedEventIds = item.relatedEventIds || [];
+              item.relatedEventIds.push(event.eventId);
+              item.failure = JSON.stringify(
+                attrs.failure
+              );
+            }
+          
+          }
+          break;
+        }
+        case EventType.ACTIVITY_TASK_TIMED_OUT:{
+          const attrs = event.activityTaskTimedOutEventAttributes
+          if(attrs) {
+            const item = activityMap[attrs.scheduledEventId];
+            if(item) {
+              item.endTime = event.eventTime;
+              item.status = "TIMED_OUT";
+              item.relatedEventIds = item.relatedEventIds || [];
+              item.relatedEventIds.push(event.eventId);
+            }
+          }
+          break;
+        }
         case EventType.ACTIVITY_TASK_CANCELED: {
-          const topWorkflowId = workflowStack[workflowStack.length - 1];
-
-          for (let i = chronologicalList.length - 1; i >= 0; i--) {
-            const item = chronologicalList[i];
-            if (
-              item.type === "activity" &&
-              item.workflowId === topWorkflowId 
-            ) {
+          const attrs = event.activityTaskCanceledEventAttributes
+          if(attrs) {
+            const item = activityMap[attrs.scheduledEventId];
+            if(item) {
               item.endTime = event.eventTime;
               item.status = this.convertEventTypeToStatus(event.eventType);
               item.relatedEventIds = item.relatedEventIds || [];
               item.relatedEventIds.push(event.eventId);
-
-              if (
-                event.eventType === EventType.ACTIVITY_TASK_COMPLETED &&
-                event.activityTaskCompletedEventAttributes?.result?.payloads
-              ) {
-                item.result = this.parsePayloads(
-                  event.activityTaskCompletedEventAttributes.result.payloads
-                );
-              }
-              if (event.activityTaskFailedEventAttributes) {
-                item.failure = JSON.stringify(
-                  event.activityTaskFailedEventAttributes.failure
-                );
-              }
-              break;
-            }
-          }
-          break;
-        }
-        case EventType.CHILD_WORKFLOW_EXECUTION_COMPLETED: {
-          const attrs = event.childWorkflowExecutionCompletedEventAttributes;
-          if (attrs && attrs.workflowExecution) {
-            const childWfId = attrs.workflowExecution.workflowId;
-
-            const childWorkflow = workflowMap[childWfId];
-            if (childWorkflow) {
-              childWorkflow.endTime = event.eventTime;
-              childWorkflow.status = "COMPLETED";
-              childWorkflow.relatedEventIds =
-                childWorkflow.relatedEventIds || [];
-              childWorkflow.relatedEventIds.push(event.eventId);
-            }
-          }
-          break;
-        }
-        case EventType.CHILD_WORKFLOW_EXECUTION_STARTED: {
-          const attrs = event.childWorkflowExecutionStartedEventAttributes;
-          if (attrs && attrs.workflowExecution) {
-            const childWfId = attrs.workflowExecution.workflowId;
-            const childRunId = attrs.workflowExecution.runId;
-
-            if (childWfId in workflowMap) {
-              // If the child workflow has already been started, update the existing entry
-              const existingChildWorkflow = workflowMap[childWfId];
-              existingChildWorkflow.startTime = event.eventTime;
-              existingChildWorkflow.relatedEventIds =
-                existingChildWorkflow.relatedEventIds || [];
-              existingChildWorkflow.relatedEventIds.push(event.eventId);
-            } else {
-              const childWorkflow: Workflow = {
-                type: "childWorkflow",
-                workflowId: childWfId,
-                runId: childRunId,
-                startTime: event.eventTime,
-                status: "RUNNING",
-                parentWorkflowId: attrs.parentWorkflowExecution?.workflowId,
-                parentRunId: attrs.parentWorkflowExecution?.runId,
-                workflowType: attrs.workflowType?.name,
-                relatedEventIds: [event.eventId],
-                input: this.parsePayloads(attrs.input?.payloads),
-                header: attrs.header,
-                memo: attrs.memo,
-                namespace: attrs.namespace,
-                taskQueue: attrs.taskQueue,
-                workflowRunTimeout: attrs.workflowRunTimeout,
-                workflowTaskTimeout: attrs.workflowTaskTimeout,
-                workflowReusePolicy: attrs.workflowReusePolicy,
-              };
-
-              workflowMap[childWfId] = childWorkflow;
-              chronologicalList.push(childWorkflow);
-              workflowStack.push(childWfId);
             }
           }
           break;
@@ -390,23 +359,12 @@ export default class TemporalService {
           const attrs =
             event.startChildWorkflowExecutionInitiatedEventAttributes;
           if (attrs) {
-            if (attrs.workflowId in workflowMap) {
-              // If the child workflow has already been started, update the existing entry
-              const existingChildWorkflow = workflowMap[attrs.workflowId];
-              existingChildWorkflow.startTime = event.eventTime;
-              existingChildWorkflow.relatedEventIds =
-                existingChildWorkflow.relatedEventIds || [];
-              existingChildWorkflow.relatedEventIds.push(event.eventId);
-              existingChildWorkflow.workflowTaskCompletedEventId =
-                attrs.workflowTaskCompletedEventId;
-            } else {
-              const currentWorkflowId = workflowStack[workflowStack.length - 1];
               const childWorkflow: Workflow = {
                 type: "childWorkflow",
                 workflowId: attrs.workflowId,
                 startTime: event.eventTime,
                 status: "INITIATED",
-                parentWorkflowId: currentWorkflowId,
+                parentWorkflowId: rootWorkflowId,
                 workflowType: attrs.workflowType?.name,
                 relatedEventIds: [event.eventId],
                 workflowTaskCompletedEventId:
@@ -416,10 +374,44 @@ export default class TemporalService {
                 workflowRunTimeout: attrs.workflowRunTimeout,
                 workflowTaskTimeout: attrs.workflowTaskTimeout,
                 workflowReusePolicy: attrs.workflowReusePolicy,
+                header: attrs.header,
+                memo: attrs.memo,
+                searchAttributes: attrs.searchAttributes,
               };
 
-              workflowMap[attrs.workflowId] = childWorkflow;
+              childWorkflowsMap[event.eventId] = childWorkflow;
               chronologicalList.push(childWorkflow);
+          }
+          break;
+        }
+        case EventType.CHILD_WORKFLOW_EXECUTION_STARTED: {
+          const attrs = event.childWorkflowExecutionStartedEventAttributes;
+          if (attrs && attrs.workflowExecution) {
+            const childWorkflow = childWorkflowsMap[attrs.initiatedEventId];
+            if (childWorkflow) {
+              childWorkflow.startTime = event.eventTime;
+              childWorkflow.relatedEventIds =
+              childWorkflow.relatedEventIds || [];
+              childWorkflow.relatedEventIds.push(event.eventId);
+              childWorkflow.runId = attrs.workflowExecution.runId;
+              childWorkflow.status = "RUNNING";
+            } 
+          }
+          break;
+        }
+        case EventType.CHILD_WORKFLOW_EXECUTION_COMPLETED: {
+          const attrs = event.childWorkflowExecutionCompletedEventAttributes;
+          if (attrs) {
+            const childWorkflow = childWorkflowsMap[attrs.initiatedEventId];
+            if (childWorkflow) {
+              childWorkflow.endTime = event.eventTime;
+              childWorkflow.status = "COMPLETED";
+              childWorkflow.relatedEventIds =
+                childWorkflow.relatedEventIds || [];
+              childWorkflow.relatedEventIds.push(event.eventId);
+              childWorkflow.result = this.parsePayloads(
+                attrs.result?.payloads
+              );
             }
           }
           break;

@@ -34,6 +34,7 @@ export interface WorkflowExecutionStartedEventAttributes {
   taskQueue: { name: string; kind: TaskQueueKind };
   input?: { payloads?: Payload[] };
   workflowTaskTimeout: string;
+  workflowRunTimeout: string;
   originalExecutionRunId: string;
   identity: string;
   firstExecutionRunId: string;
@@ -43,6 +44,7 @@ export interface WorkflowExecutionStartedEventAttributes {
   memo: Record<string, any>;
   searchAttributes: Record<string, any>;
   workflowId: string;
+  parentWorkflowNamespace?: string;
   parentWorkflowExecution?: {
     workflowId: string;
     runId: string;
@@ -117,7 +119,9 @@ export interface StartChildWorkflowExecutionInitiatedEventAttributes {
   workflowRunTimeout: string;
   workflowTaskTimeout: string;
   workflowReusePolicy: string;
-  // additional fields as needed
+  header: Record<string, any>;
+  memo: Record<string, any>;
+  searchAttributes: Record<string, any>;
 }
 
 export interface ChildWorkflowExecutionStartedEventAttributes {
@@ -127,10 +131,6 @@ export interface ChildWorkflowExecutionStartedEventAttributes {
   };
   workflowType: { name: string };
   initiatedEventId: string;
-  parentWorkflowExecution?: {
-    workflowId: string;
-    runId: string;
-  };
   namespace: string;
   taskQueue: { name: string; kind: TaskQueueKind };
   workflowRunTimeout: string;
@@ -225,6 +225,8 @@ export interface Event {
   eventType: EventType;
   version: string;
   taskId: string;
+  scheduledEventId: string;
+  taskQueue:TaskQueue
 
   workflowExecutionStartedEventAttributes?: WorkflowExecutionStartedEventAttributes;
   workflowTaskScheduledEventAttributes?: WorkflowTaskScheduledEventAttributes;
@@ -307,7 +309,8 @@ export type Workflow = {
   endTime?: string;
   status?: string;
   parentWorkflowId?: string;
-  parentRunId?: string;
+  parentWorkflowRunId?: string;
+  parentWorkflowNamespace?: string;
   input?: string;
   result?: string;
   taskQueue?: TaskQueue;
@@ -320,6 +323,8 @@ export type Workflow = {
   attempts?: number;
   relatedEventIds?: string[];
   workflowTaskCompletedEventId?: string;
+  originalExecutionRunId?: string;
+  firstExecutionRunId?: string;
   workflowRunTimeout?: string;
   workflowTaskTimeout?: string;
   workflowReusePolicy?: string;
