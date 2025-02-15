@@ -265,6 +265,8 @@ export default class TemporalService {
               relatedEventIds: [event.eventId],
               workflowTaskCompletedEventId: attrs.workflowTaskCompletedEventId,
               taskId: event.taskId,
+              sortEventTime: event.eventTime,
+              sortEventId: event.eventId,
             };
             activityMap[event.eventId] = act;
             chronologicalList.push(act);
@@ -389,6 +391,8 @@ export default class TemporalService {
               childWorkflow.relatedEventIds.push(event.eventId);
               childWorkflow.runId = attrs.workflowExecution.runId;
               childWorkflow.status = "RUNNING";
+              childWorkflow.sortEventTime = event.eventTime;
+              childWorkflow.sortEventId = event.eventId;
             }
           }
           break;
@@ -449,6 +453,8 @@ export default class TemporalService {
             workflowTaskTimeout: attrs.workflowTaskTimeout,
             workflowRunTimeout: attrs.workflowRunTimeout,
             taskId: event.taskId,
+            sortEventTime: event.eventTime,
+            sortEventId: event.eventId,
           };
           return wf;
         }

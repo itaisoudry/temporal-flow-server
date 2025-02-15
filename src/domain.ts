@@ -303,6 +303,8 @@ export type Activity = {
   lastAttemptCompleteTime?: string;
   lastWorkerIdentity?: string;
   taskId?: string;
+  sortEventTime?: string;
+  sortEventId?: string;
 };
 
 export type Workflow = {
@@ -335,6 +337,8 @@ export type Workflow = {
   workflowTaskTimeout?: string;
   workflowReusePolicy?: string;
   taskId?: string;
+  sortEventTime?: string;
+  sortEventId?: string;
 };
 
 export type ChronologicalItem = Workflow | Activity;
