@@ -36,12 +36,21 @@ export default class TemporalService {
     };
   }
 
-  async getRootWorkflowData(namespace: string, rootWorkflowId: string) {
+  async getRootWorkflowData(
+    namespace: string,
+    rootWorkflowId: string,
+    rootWorkflowRunId: string
+  ) {
     const historyResponse = await this.getWorkflowHistoryData(
       namespace,
-      rootWorkflowId
+      rootWorkflowId,
+      rootWorkflowRunId
     );
-    const items = await this.parseTemporalHistory(historyResponse, namespace, rootWorkflowId);
+    const items = await this.parseTemporalHistory(
+      historyResponse,
+      namespace,
+      rootWorkflowRunId
+    );
 
     // Get additional data for non-completed workflows
     for (const item of items) {
@@ -101,9 +110,10 @@ export default class TemporalService {
 
   private async getWorkflowData(
     namespace: string,
-    workflowId: string
+    workflowId: string,
+    runId: string = ""
   ): Promise<WorkflowResponse> {
-    const url = `https://${this.endpoint}.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows/${workflowId}`;
+    const url = `https://${this.endpoint}.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows/${workflowId}?execution.runId=${runId}`;
     const response = await fetch(url, { headers: this.headers });
 
     if (!response.ok) {
@@ -119,12 +129,16 @@ export default class TemporalService {
   }
 
   // TODO: add request without history to get pending activities
-  private async getWorkflowHistoryData(namespace: string, workflowId: string) {
+  private async getWorkflowHistoryData(
+    namespace: string,
+    workflowId: string,
+    runId: string
+  ) {
     const baseUrl = `https://${
       this.endpoint
     }.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows/${encodeURIComponent(
       workflowId
-    )}/history?next_page_token=`;
+    )}/history?execution.runId=${runId}&next_page_token=`;
     const allEvents = [];
     let nextPageToken = null;
     do {
@@ -178,43 +192,24 @@ export default class TemporalService {
   private parseTemporalHistory(
     events: Event[],
     namespace: string,
-    rootWorkflowId: string
+    rootWorkflowRunId: string
   ): ChronologicalItem[] {
     const chronologicalList: ChronologicalItem[] = [];
     const childWorkflowsMap: Record<string, Workflow> = {};
     const activityMap: Record<string, Activity> = {};
+    const rootWorkflow = this.extractRootWorkflow(
+      events,
+      namespace,
+      rootWorkflowRunId
+    );
+    chronologicalList.push(rootWorkflow);
 
     for (const event of events) {
       switch (event.eventType) {
         case EventType.WORKFLOW_EXECUTION_STARTED: {
-          const attrs = event.workflowExecutionStartedEventAttributes;
-          if (attrs) {
-            const wf: Workflow = {
-              type: "workflow",
-              workflowId: attrs.workflowId,
-              runId: attrs.firstExecutionRunId,
-              workflowType: attrs.workflowType.name,
-              startTime: event.eventTime,
-              status: "RUNNING",
-              relatedEventIds: [event.eventId],
-              input: this.parsePayloads(attrs.input?.payloads),
-              header: attrs.header,
-              attempts: attrs.attempt,
-              searchAttributes: attrs.searchAttributes,
-              memo: attrs.memo,
-              taskQueue: attrs.taskQueue,
-              namespace: namespace,
-              parentWorkflowId: attrs.parentWorkflowExecution?.workflowId,
-              parentWorkflowRunId: attrs.parentWorkflowExecution?.runId,
-              parentWorkflowNamespace: attrs.parentWorkflowNamespace,
-              originalExecutionRunId: attrs.originalExecutionRunId,
-              firstExecutionRunId: attrs.firstExecutionRunId,
-              workflowTaskTimeout: attrs.workflowTaskTimeout,
-              workflowRunTimeout: attrs.workflowRunTimeout,
-              taskId: event.taskId,
-            };
-
-            chronologicalList.push(wf);
+          if (!rootWorkflow) {
+            console.error("Root workflow not found");
+            throw new NotFoundException("Root workflow not found");
           }
           break;
         }
@@ -242,7 +237,7 @@ export default class TemporalService {
               event.workflowExecutionFailedEventAttributes
             );
           }
-          if(event.eventType === EventType.WORKFLOW_EXECUTION_TERMINATED) {
+          if (event.eventType === EventType.WORKFLOW_EXECUTION_TERMINATED) {
             wf.result = JSON.stringify(
               event.workflowExecutionTerminatedEventAttributes
             );
@@ -257,7 +252,8 @@ export default class TemporalService {
               type: "activity",
               activityId: attrs.activityId,
               activityType: attrs.activityType.name,
-              workflowId: rootWorkflowId,
+              workflowId: rootWorkflow.workflowId,
+              workflowRunId: rootWorkflow.runId,
               scheduleTime: event.eventTime,
               scheduleToCloseTimeout: attrs.scheduleToCloseTimeout,
               scheduleToStartTimeout: attrs.scheduleToStartTimeout,
@@ -296,45 +292,40 @@ export default class TemporalService {
           break;
         }
 
-        case EventType.ACTIVITY_TASK_COMPLETED:{
-          const attrs = event.activityTaskCompletedEventAttributes
-          if(attrs) {
+        case EventType.ACTIVITY_TASK_COMPLETED: {
+          const attrs = event.activityTaskCompletedEventAttributes;
+          if (attrs) {
             const item = activityMap[attrs.scheduledEventId];
-            if(item) {
+            if (item) {
               item.endTime = event.eventTime;
               item.status = "COMPLETED";
               item.relatedEventIds = item.relatedEventIds || [];
               item.relatedEventIds.push(event.eventId);
-              item.result = this.parsePayloads(
-                attrs.result?.payloads
-              );
+              item.result = this.parsePayloads(attrs.result?.payloads);
             }
           }
-          
+
           break;
         }
-        case EventType.ACTIVITY_TASK_FAILED:{
-          const attrs = event.activityTaskFailedEventAttributes
-          if(attrs) {
+        case EventType.ACTIVITY_TASK_FAILED: {
+          const attrs = event.activityTaskFailedEventAttributes;
+          if (attrs) {
             const item = activityMap[attrs.scheduledEventId];
-            if(item) {
+            if (item) {
               item.endTime = event.eventTime;
               item.status = "FAILED";
               item.relatedEventIds = item.relatedEventIds || [];
               item.relatedEventIds.push(event.eventId);
-              item.failure = JSON.stringify(
-                attrs.failure
-              );
+              item.failure = JSON.stringify(attrs.failure);
             }
-          
           }
           break;
         }
-        case EventType.ACTIVITY_TASK_TIMED_OUT:{
-          const attrs = event.activityTaskTimedOutEventAttributes
-          if(attrs) {
+        case EventType.ACTIVITY_TASK_TIMED_OUT: {
+          const attrs = event.activityTaskTimedOutEventAttributes;
+          if (attrs) {
             const item = activityMap[attrs.scheduledEventId];
-            if(item) {
+            if (item) {
               item.endTime = event.eventTime;
               item.status = "TIMED_OUT";
               item.relatedEventIds = item.relatedEventIds || [];
@@ -344,10 +335,10 @@ export default class TemporalService {
           break;
         }
         case EventType.ACTIVITY_TASK_CANCELED: {
-          const attrs = event.activityTaskCanceledEventAttributes
-          if(attrs) {
+          const attrs = event.activityTaskCanceledEventAttributes;
+          if (attrs) {
             const item = activityMap[attrs.scheduledEventId];
-            if(item) {
+            if (item) {
               item.endTime = event.eventTime;
               item.status = this.convertEventTypeToStatus(event.eventType);
               item.relatedEventIds = item.relatedEventIds || [];
@@ -361,29 +352,29 @@ export default class TemporalService {
           const attrs =
             event.startChildWorkflowExecutionInitiatedEventAttributes;
           if (attrs) {
-              const childWorkflow: Workflow = {
-                type: "childWorkflow",
-                workflowId: attrs.workflowId,
-                startTime: event.eventTime,
-                status: "INITIATED",
-                parentWorkflowId: rootWorkflowId,
-                workflowType: attrs.workflowType?.name,
-                relatedEventIds: [event.eventId],
-                workflowTaskCompletedEventId:
-                  attrs.workflowTaskCompletedEventId,
-                namespace: attrs.namespace,
-                taskQueue: attrs.taskQueue,
-                workflowRunTimeout: attrs.workflowRunTimeout,
-                workflowTaskTimeout: attrs.workflowTaskTimeout,
-                workflowReusePolicy: attrs.workflowReusePolicy,
-                header: attrs.header,
-                memo: attrs.memo,
-                searchAttributes: attrs.searchAttributes,
-                taskId: event.taskId,
-              };
+            const childWorkflow: Workflow = {
+              type: "childWorkflow",
+              workflowId: attrs.workflowId,
+              startTime: event.eventTime,
+              status: "INITIATED",
+              parentWorkflowId: rootWorkflow.workflowId,
+              runId: "temp_run_id",
+              workflowType: attrs.workflowType?.name,
+              relatedEventIds: [event.eventId],
+              workflowTaskCompletedEventId: attrs.workflowTaskCompletedEventId,
+              namespace: attrs.namespace,
+              taskQueue: attrs.taskQueue,
+              workflowRunTimeout: attrs.workflowRunTimeout,
+              workflowTaskTimeout: attrs.workflowTaskTimeout,
+              workflowReusePolicy: attrs.workflowReusePolicy,
+              header: attrs.header,
+              memo: attrs.memo,
+              searchAttributes: attrs.searchAttributes,
+              taskId: event.taskId,
+            };
 
-              childWorkflowsMap[event.eventId] = childWorkflow;
-              chronologicalList.push(childWorkflow);
+            childWorkflowsMap[event.eventId] = childWorkflow;
+            chronologicalList.push(childWorkflow);
           }
           break;
         }
@@ -394,11 +385,11 @@ export default class TemporalService {
             if (childWorkflow) {
               childWorkflow.startTime = event.eventTime;
               childWorkflow.relatedEventIds =
-              childWorkflow.relatedEventIds || [];
+                childWorkflow.relatedEventIds || [];
               childWorkflow.relatedEventIds.push(event.eventId);
               childWorkflow.runId = attrs.workflowExecution.runId;
               childWorkflow.status = "RUNNING";
-            } 
+            }
           }
           break;
         }
@@ -412,9 +403,7 @@ export default class TemporalService {
               childWorkflow.relatedEventIds =
                 childWorkflow.relatedEventIds || [];
               childWorkflow.relatedEventIds.push(event.eventId);
-              childWorkflow.result = this.parsePayloads(
-                attrs.result?.payloads
-              );
+              childWorkflow.result = this.parsePayloads(attrs.result?.payloads);
             }
           }
           break;
@@ -426,6 +415,46 @@ export default class TemporalService {
     }
 
     return chronologicalList;
+  }
+
+  private extractRootWorkflow(
+    events: Event[],
+    namespace: string,
+    runId: string
+  ): Workflow {
+    for (const event of events) {
+      if (event.eventType === EventType.WORKFLOW_EXECUTION_STARTED) {
+        const attrs = event.workflowExecutionStartedEventAttributes;
+        if (attrs) {
+          const wf: Workflow = {
+            type: "workflow",
+            workflowId: attrs.workflowId,
+            runId: runId,
+            workflowType: attrs.workflowType.name,
+            startTime: event.eventTime,
+            status: "RUNNING",
+            relatedEventIds: [event.eventId],
+            input: this.parsePayloads(attrs.input?.payloads),
+            header: attrs.header,
+            attempts: attrs.attempt,
+            searchAttributes: attrs.searchAttributes,
+            memo: attrs.memo,
+            taskQueue: attrs.taskQueue,
+            namespace: namespace,
+            parentWorkflowId: attrs.parentWorkflowExecution?.workflowId,
+            parentWorkflowRunId: attrs.parentWorkflowExecution?.runId,
+            parentWorkflowNamespace: attrs.parentWorkflowNamespace,
+            originalExecutionRunId: attrs.originalExecutionRunId,
+            firstExecutionRunId: attrs.firstExecutionRunId,
+            workflowTaskTimeout: attrs.workflowTaskTimeout,
+            workflowRunTimeout: attrs.workflowRunTimeout,
+            taskId: event.taskId,
+          };
+          return wf;
+        }
+      }
+    }
+    throw new NotFoundException("Root workflow not found");
   }
 
   private convertEventTypeToStatus(status: string) {

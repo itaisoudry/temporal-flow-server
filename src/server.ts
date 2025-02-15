@@ -8,6 +8,7 @@ const app = express();
 interface WorkflowQuery {
   id: string;
   namespace: string;
+  runId: string;
 }
 
 const temporal = new Temporal();
@@ -22,14 +23,14 @@ app.use((req, res, next) => {
 app.get(
   "/workflow",
   async (req: Request<{}, {}, {}, WorkflowQuery>, res: Response) => {
-    const { id, namespace } = req.query;
+    const { id, namespace, runId } = req.query;
     try {
-      if (!id || !namespace) {
+      if (!id || !namespace || !runId) {
         res.status(400).json({ error: "Missing required query parameters" });
         return;
       }
 
-      const data = await temporal.getRootWorkflowData(namespace, id);
+      const data = await temporal.getRootWorkflowData(namespace, id, runId);
       res.status(200).json(data);
     } catch (error) {
       console.error(error);
