@@ -198,7 +198,11 @@ export interface ActivityTaskCompletedEventAttributes {
 export interface ActivityTaskFailedEventAttributes {
   scheduledEventId: string;
   startedEventId: string;
-  failure?: { message: string; stackTrace: string, applicationFailureInfo?: {type: string}};
+  failure?: {
+    message: string;
+    stackTrace: string;
+    applicationFailureInfo?: { type: string };
+  };
 }
 
 export interface ActivityTaskTimedOutEventAttributes {
@@ -226,7 +230,7 @@ export interface Event {
   version: string;
   taskId: string;
   scheduledEventId: string;
-  taskQueue:TaskQueue
+  taskQueue: TaskQueue;
 
   workflowExecutionStartedEventAttributes?: WorkflowExecutionStartedEventAttributes;
   workflowTaskScheduledEventAttributes?: WorkflowTaskScheduledEventAttributes;
@@ -275,6 +279,7 @@ export type Activity = {
   activityId: string;
   activityType?: string;
   workflowId: string; // Which workflow this activity belongs to
+  workflowRunId: string;
   scheduleTime?: string;
   startTime?: string;
   endTime?: string;
@@ -303,7 +308,7 @@ export type Activity = {
 export type Workflow = {
   type: "workflow" | "childWorkflow";
   workflowId: string;
-  runId?: string; // If available
+  runId: string;
   workflowType?: string;
   namespace?: string;
   startTime?: string;
