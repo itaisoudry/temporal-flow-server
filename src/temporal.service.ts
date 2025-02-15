@@ -267,6 +267,7 @@ export default class TemporalService {
               taskId: event.taskId,
               sortEventTime: event.eventTime,
               sortEventId: event.eventId,
+              taskQueue: attrs.taskQueue,
             };
             activityMap[event.eventId] = act;
             chronologicalList.push(act);
