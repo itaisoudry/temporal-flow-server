@@ -50,6 +50,29 @@ app.get(
   }
 );
 
+app.get("/search", async (req: Request, res: Response) => {
+  const { query, namespace } = req.query;
+  if (!query || !namespace) {
+    res.status(400).json({ error: "Missing required query parameters" });
+    return;
+  }
+  try {
+    const results = await temporal.searchWorkflows(
+      query as string,
+      namespace as string
+    );
+    res.status(200).json(results);
+  } catch (error) {
+    console.error(
+      `Failed to search workflows, query: ${query}, namespace: ${namespace}`,
+      error
+    );
+    res.status(500).json({
+      error: "Failed to search workflows",
+    });
+  }
+});
+
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok" });
 });

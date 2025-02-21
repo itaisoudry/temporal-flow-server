@@ -8,7 +8,8 @@ import {
   TaskQueueKind,
   Workflow,
   WorkflowResponse,
-} from "./domain";
+} from "./domain/events";
+import { SearchResponse } from "./domain/executions";
 import { InternalServerError, NotFoundException } from "./excpetions";
 
 export default class TemporalService {
@@ -34,6 +35,25 @@ export default class TemporalService {
     this.headers = {
       Authorization: `Bearer ${this.apiKey}`,
     };
+  }
+
+  async searchWorkflows(query: string, namespace: string) {
+    const url = `https://${this.endpoint}.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows?query=${encodeURIComponent(query)}`;
+    const response = await fetch(url, { headers: this.headers });
+    if (!response.ok) {
+      throw new InternalServerError(
+        `Failed to search workflows. Status: ${response.status}`
+      );
+    }
+
+    const data = (await response.json()) as SearchResponse;
+    if (!data.executions) {
+      return [];
+    }
+    for (let execution of data.executions) {
+      execution.status = this.convertWorkflowStatusToStatus(execution.status);
+    }
+    return data;
   }
 
   async getRootWorkflowData(
@@ -128,7 +148,6 @@ export default class TemporalService {
     return await response.json();
   }
 
-  // TODO: add request without history to get pending activities
   private async getWorkflowHistoryData(
     namespace: string,
     workflowId: string,
