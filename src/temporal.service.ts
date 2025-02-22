@@ -38,7 +38,11 @@ export default class TemporalService {
   }
 
   async searchWorkflows(query: string, namespace: string) {
-    const url = `https://${this.endpoint}.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows?query=${encodeURIComponent(query)}`;
+    const url = `https://${
+      this.endpoint
+    }.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows?query=${encodeURIComponent(
+      query
+    )}`;
     const response = await fetch(url, { headers: this.headers });
     if (!response.ok) {
       throw new InternalServerError(
@@ -51,7 +55,11 @@ export default class TemporalService {
       return [];
     }
     for (let execution of data.executions) {
-      execution.status = this.convertWorkflowStatusToStatus(execution.status);
+      execution.status = this.convertWorkflowStatusToStatus(execution.status)
+        .toLowerCase()
+        .split("_")
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join("");
     }
     return data;
   }
