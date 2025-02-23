@@ -1,6 +1,6 @@
 # Temporal Flow API Server
 
-Try it out: [Temporal Flow Web](https://itaisoudrydry.github.io/temporal-flow-web)
+Try it out: [Temporal Flow Web](https://itaisoudry.github.io/temporal-flow-web)
 
 This server provides an API to fetch and parse Temporal workflow data in a more consumable format. It simplifies the process of analyzing workflow executions by providing a clean, chronological view of workflows and their activities.
 This will provider the needed data for the UI to display the workflow history.

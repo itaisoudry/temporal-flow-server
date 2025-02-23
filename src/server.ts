@@ -4,6 +4,8 @@ import { NotFoundException } from "./excpetions";
 
 const PORT = 7531; // Uncommon port number
 
+const whitelistedOrigins = ["http://localhost:5173", "https://itaisoudry.github.io"];
+
 const app = express();
 interface WorkflowQuery {
   id: string;
@@ -14,7 +16,12 @@ interface WorkflowQuery {
 const temporal = new Temporal();
 
 app.use((req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  // allow only itaisoudry.github.io or localhost:5173
+  // get the origin from the request headers
+  const origin = req.get("origin");
+  if (origin && whitelistedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   next();
