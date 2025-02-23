@@ -52,7 +52,7 @@ app.get(
 
 app.get("/search", async (req: Request, res: Response) => {
   const { query, namespace } = req.query;
-  if (!query || !namespace) {
+  if (!namespace) {
     res.status(400).json({ error: "Missing required query parameters" });
     return;
   }

@@ -38,6 +38,9 @@ export default class TemporalService {
   }
 
   async searchWorkflows(query: string, namespace: string) {
+    if(!query){
+      query = ""
+    }
     const url = `https://${
       this.endpoint
     }.web.tmprl.cloud/api/v1/namespaces/${namespace}/workflows?query=${encodeURIComponent(
