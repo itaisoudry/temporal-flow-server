@@ -38,8 +38,8 @@ export default class TemporalService {
   }
 
   async searchWorkflows(query: string, namespace: string) {
-    if(!query){
-      query = ""
+    if (!query) {
+      query = "";
     }
     const url = `https://${
       this.endpoint
@@ -71,7 +71,25 @@ export default class TemporalService {
     namespace: string,
     rootWorkflowId: string,
     rootWorkflowRunId: string
-  ) {
+  ): Promise<ChronologicalItem[]> {
+    const historyResponse = await this.getWorkflowHistoryData(
+      namespace,
+      rootWorkflowId,
+      rootWorkflowRunId
+    );
+    const items = await this.parseTemporalHistory(
+      historyResponse,
+      namespace,
+      rootWorkflowRunId
+    );
+    return items.filter((item) => item.type === "workflow");
+  }
+
+  async getRootWorkflowEnrichedData(
+    namespace: string,
+    rootWorkflowId: string,
+    rootWorkflowRunId: string
+  ): Promise<ChronologicalItem[]> {
     const historyResponse = await this.getWorkflowHistoryData(
       namespace,
       rootWorkflowId,
@@ -83,7 +101,15 @@ export default class TemporalService {
       rootWorkflowRunId
     );
 
-    // Get additional data for non-completed workflows
+    await this.enrichChildWorkflows(items, namespace);
+
+    return items;
+  }
+
+  private async enrichChildWorkflows(
+    items: ChronologicalItem[],
+    namespace: string
+  ) {
     for (const item of items) {
       if (
         (item.type === "workflow" || item.type === "childWorkflow") &&
@@ -91,7 +117,8 @@ export default class TemporalService {
       ) {
         const workflowData = await this.getWorkflowData(
           namespace,
-          item.workflowId
+          item.workflowId,
+          item.runId
         );
 
         item.status = this.convertWorkflowStatusToStatus(
@@ -135,11 +162,9 @@ export default class TemporalService {
         }
       }
     }
-
-    return items;
   }
 
-  private async getWorkflowData(
+  async getWorkflowData(
     namespace: string,
     workflowId: string,
     runId: string = ""
@@ -526,7 +551,7 @@ export default class TemporalService {
     }
   }
 
-  private convertWorkflowStatusToStatus(status: string) {
+  convertWorkflowStatusToStatus(status: string) {
     switch (status) {
       case "WORKFLOW_EXECUTION_STATUS_RUNNING":
         return "RUNNING";

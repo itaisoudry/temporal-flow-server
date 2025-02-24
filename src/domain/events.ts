@@ -383,15 +383,22 @@ export interface PendingActivity {
   lastAttemptCompleteTime: string;
 }
 
+export interface WorkflowExecution {
+  workflowId: string;
+  runId: string;
+}
+
 export interface WorkflowExecutionInfo {
   status: string;
   startTime: string;
   closeTime: string;
-  parentExecution: {
-    workflowId: string;
-    runId: string;
-  };
+  parentExecution: WorkflowExecution;
+  rootExecution: WorkflowExecution;
+  taskQueue: string;
+  executionDuration: string;
   parentNamespaceId: string;
+  searchAttributes: Record<string, any>;
+  memo: Record<string, any>;
 }
 
 export interface WorkflowResponse {
