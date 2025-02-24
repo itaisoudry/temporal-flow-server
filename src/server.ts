@@ -1,6 +1,7 @@
 import express, { Request, Response } from "express";
 import Temporal from "./temporal.service";
 import { NotFoundException } from "./excpetions";
+import { Workflow } from "./domain/events";
 
 const PORT = 7531; // Uncommon port number
 
@@ -30,7 +31,11 @@ app.get(
         return;
       }
 
-      const data = await temporal.getRootWorkflowData(namespace, id, runId);
+      const data = await temporal.getRootWorkflowEnrichedData(
+        namespace,
+        id,
+        runId
+      );
       res.status(200).json(data);
     } catch (error) {
       console.error(error);
@@ -49,6 +54,38 @@ app.get(
     }
   }
 );
+
+app.get("/workflow/data", async (req: Request, res: Response) => {
+  const { id, namespace, runId } = req.query;
+  if (!id || !namespace || !runId) {
+    res.status(400).json({ error: "Missing required query parameters" });
+    return;
+  }
+  try {
+    const response = await temporal.getRootWorkflowData(
+      namespace as string,
+      id as string,
+      runId as string
+    );
+
+    const rootWorkflow = response.filter(
+      (workflow) =>
+        workflow.type === "workflow" &&
+        workflow.workflowId === id &&
+        workflow.runId === runId
+    )[0];
+
+    res.status(200).json(rootWorkflow);
+  } catch (error) {
+    console.error(
+      `Failed to get workflow data, id: ${id}, namespace: ${namespace}, runId: ${runId}`,
+      error
+    );
+    res.status(500).json({
+      error: "Failed to get workflow data",
+    });
+  }
+});
 
 app.get("/search", async (req: Request, res: Response) => {
   const { query, namespace } = req.query;
