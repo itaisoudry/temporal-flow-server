@@ -244,11 +244,11 @@ export default class TemporalService {
       : undefined;
   }
 
-  private parseTemporalHistory(
+  private async parseTemporalHistory(
     events: Event[],
     namespace: string,
     rootWorkflowRunId: string
-  ): ChronologicalItem[] {
+  ): Promise<ChronologicalItem[]> {
     const chronologicalList: ChronologicalItem[] = [];
     const childWorkflowsMap: Record<string, Workflow> = {};
     const activityMap: Record<string, Activity> = {};
@@ -416,7 +416,8 @@ export default class TemporalService {
               startTime: event.eventTime,
               status: "INITIATED",
               parentWorkflowId: rootWorkflow.workflowId,
-              runId: "temp_run_id",
+              parentWorkflowRunId: rootWorkflow.runId,
+              runId: "",
               workflowType: attrs.workflowType?.name,
               relatedEventIds: [event.eventId],
               workflowTaskCompletedEventId: attrs.workflowTaskCompletedEventId,
@@ -468,7 +469,30 @@ export default class TemporalService {
           }
           break;
         }
-
+        case EventType.START_CHILD_WORKFLOW_EXECUTION_FAILED: {
+          const attrs = event.startChildWorkflowExecutionFailedEventAttributes;
+          if (attrs) {
+            const childWorkflow = childWorkflowsMap[attrs.initiatedEventId];
+            if (childWorkflow) {
+              if (
+                attrs.cause ===
+                "START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS"
+              ) {
+                // Set runId to empty, we'll get it in the next call if needed
+                childWorkflow.runId = "";
+                childWorkflow.status = "RUNNING";
+              } else if (
+                attrs.cause ===
+                "WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY"
+              ) {
+                // For this case, we keep the workflow in INITIATED state with no runId
+                childWorkflow.status = "INITIATED";
+                childWorkflow.runId = "";
+              }
+            }
+          }
+          break;
+        }
         default:
           break;
       }

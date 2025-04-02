@@ -1,3 +1,5 @@
+import { WorkflowExecutionInfo } from "./executions";
+
 export enum EventType {
   WORKFLOW_EXECUTION_STARTED = "EVENT_TYPE_WORKFLOW_EXECUTION_STARTED",
   WORKFLOW_TASK_SCHEDULED = "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
@@ -17,6 +19,7 @@ export enum EventType {
   START_CHILD_WORKFLOW_EXECUTION_INITIATED = "EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED",
   CHILD_WORKFLOW_EXECUTION_STARTED = "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED",
   CHILD_WORKFLOW_EXECUTION_COMPLETED = "EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED",
+  START_CHILD_WORKFLOW_EXECUTION_FAILED = "EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED",
 }
 
 export enum TaskQueueKind {
@@ -223,6 +226,15 @@ export interface WorkflowExecutionCompletedEventAttributes {
   workflowTaskCompletedEventId: string;
 }
 
+export interface StartChildWorkflowExecutionFailedEventAttributes {
+  namespace: string;
+  namespaceId: string;
+  workflowId: string;
+  workflowType: { name: string };
+  cause: string;
+  initiatedEventId: string;
+}
+
 export interface Event {
   eventId: string;
   eventTime: string;
@@ -250,6 +262,7 @@ export interface Event {
   startChildWorkflowExecutionInitiatedEventAttributes?: StartChildWorkflowExecutionInitiatedEventAttributes;
   childWorkflowExecutionStartedEventAttributes?: ChildWorkflowExecutionStartedEventAttributes;
   childWorkflowExecutionCompletedEventAttributes?: ChildWorkflowExecutionCompletedEventAttributes;
+  startChildWorkflowExecutionFailedEventAttributes?: StartChildWorkflowExecutionFailedEventAttributes;
 }
 
 export interface HistoryResponse {
@@ -388,18 +401,18 @@ export interface WorkflowExecution {
   runId: string;
 }
 
-export interface WorkflowExecutionInfo {
-  status: string;
-  startTime: string;
-  closeTime: string;
-  parentExecution: WorkflowExecution;
-  rootExecution: WorkflowExecution;
-  taskQueue: string;
-  executionDuration: string;
-  parentNamespaceId: string;
-  searchAttributes: Record<string, any>;
-  memo: Record<string, any>;
-}
+// export interface WorkflowExecutionInfo {
+//   status: string;
+//   startTime: string;
+//   closeTime: string;
+//   parentExecution: WorkflowExecution;
+//   rootExecution: WorkflowExecution;
+//   taskQueue: string;
+//   executionDuration: string;
+//   parentNamespaceId: string;
+//   searchAttributes: Record<string, any>;
+//   memo: Record<string, any>;
+// }
 
 export interface WorkflowResponse {
   pendingChildren: PendingChildWorkflow[];
