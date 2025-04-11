@@ -2,8 +2,8 @@
 
 Try it out: [Temporal Flow Web](https://itaisoudry.github.io/temporal-flow-web)
 
-This server provides an API to fetch and parse Temporal workflow data in a more consumable format. It simplifies the process of analyzing workflow executions by providing a clean, chronological view of workflows and their activities.
-This will provider the needed data for the UI to display the workflow history.
+This server provides an API to fetch Temporal Events.
+This will provider the needed data for the UI to display the workflow data.
 
 ## Prerequisites
 
@@ -38,6 +38,8 @@ This will provider the needed data for the UI to display the workflow history.
    - The `TEMPORAL_API_KEY` can be found in your Temporal Cloud account settings
    - The `TEMPORAL_ENDPOINT` is your Temporal namespace endpoint (e.g., "foo.bar.tmprl.cloud")
    - Do not include "https://" or ".web.tmprl.cloud" in the endpoint
+   - You can use localhost if you have temporal running locally or in a k8s cluster
+   
 
 ## Running the Server
 
@@ -101,36 +103,28 @@ docker run -p 7531:7531 \
 ### Get Workflow History
 
 ```
-GET /workflow?namespace={namespace}&id={workflowId}
+GET /workflow?namespace={namespace}&id={workflowId}&runId={runId}
 ```
 
 Parameters:
 
 - `namespace`: Your Temporal namespace
 - `id`: The workflow ID you want to fetch
+- `runId`: The workflow Run ID
 
 Example request:
 
 ```bash
-curl "http://localhost:7531/workflow?namespace=your-namespace&id=your-workflow-id"
+curl "http://localhost:7531/workflow?namespace=<your-namespace>&id=<your-workflow-id>&runId=<workflow-run-id>"
 ```
 
 ## Response Format
 
-The API returns a chronological list of workflow and activity events, including:
-
-- Workflow execution details
-- Activity task lifecycles
-- Child workflow executions
-- Input/output payloads (automatically decoded from base64)
-- Timing information
-- Status updates
+The API returns a list of events of the requested workflow as in Temporal API.
 
 ## Security Notes
 
-- The server includes CORS headers allowing all origins (`*`)
 - Make sure to keep your `.env` file secure and never commit it to version control
-- Consider implementing additional security measures for production use
 
 ## Troubleshooting
 
